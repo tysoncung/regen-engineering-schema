@@ -11,7 +11,7 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { loadTree, isVerified, ownerOf, ID_PATTERN } from './lib/load.mjs'
+import { loadTree, isVerified, ownerOf, locksFor, ID_PATTERN } from './lib/load.mjs'
 
 const argv = process.argv.slice(2)
 const json = argv.includes('--json')
@@ -39,7 +39,7 @@ for (const m of [...tree.modules].sort()) {
   const missing = required.filter((f) => !existsSync(join(dir, f)))
   const items = [...tree.items.values()].filter((o) => o.file.startsWith(`${m}/`)).length
   if (!items) missing.push('no knowledge items')
-  if (!tree.locks.has(m)) missing.push('knowledge.lock')
+  if (!locksFor(m, tree).length) missing.push('knowledge.lock')
   coverage.push({ module: m, complete: missing.length === 0, missing })
 }
 
@@ -49,19 +49,23 @@ for (const m of [...tree.modules].sort()) {
 // last commit touching the module's knowledge against the recorded version.
 // Otherwise fall back to the drift field the lock declares.
 
+// A module with several implementations has one lock per stack, and each is
+// judged separately: TypeScript can be current while Python lags behind.
 const freshness = []
 for (const m of [...tree.modules].sort()) {
-  const lock = tree.locks.get(m)
-  if (!lock) {
+  const locks = locksFor(m, tree)
+  if (!locks.length) {
     freshness.push({ module: m, state: 'no-lock' })
     continue
   }
-  const declared = lock.data?.drift ?? 'unknown'
-  let state = declared === 'knowledge-ahead' ? 'stale' : 'current'
-  let evidence = `lock declares drift: ${declared}`
+  const head = inGitRepo ? git(['log', '-1', '--format=%h', '--', `${m}/knowledge`]) : null
 
-  if (inGitRepo) {
-    const head = git(['log', '-1', '--format=%h', '--', `${m}/knowledge`])
+  for (const lock of locks) {
+    const label = lock.stack ? `${m} (${lock.stack})` : m
+    const declared = lock.data?.drift ?? 'unknown'
+    let state = declared === 'knowledge-ahead' ? 'stale' : 'current'
+    let evidence = `lock declares drift: ${declared}`
+
     const recorded = lock.data?.knowledge_version
     if (head && recorded) {
       const matches = head.startsWith(recorded) || recorded.startsWith(head)
@@ -70,17 +74,19 @@ for (const m of [...tree.modules].sort()) {
         : `knowledge_version ${recorded} but knowledge last changed in ${head}`
       if (!matches) state = 'stale'
     }
+    freshness.push({ module: label, state, evidence })
   }
-  freshness.push({ module: m, state, evidence })
 }
 
 // ---------------------------------------------------------------- integrity
 
 const integrity = []
-for (const [m, lock] of [...tree.locks].sort()) {
-  const drift = lock.data?.drift
-  if (drift === 'code-ahead')
-    integrity.push({ module: m, debt: lock.data?.drift_debt ?? null })
+for (const lock of [...tree.locks.values()].sort((a, b) => a.file.localeCompare(b.file))) {
+  if (lock.data?.drift === 'code-ahead')
+    integrity.push({
+      module: lock.stack ? `${lock.module} (${lock.stack})` : lock.module,
+      debt: lock.data?.drift_debt ?? null,
+    })
 }
 
 // ---------------------------------------------------------- traceability

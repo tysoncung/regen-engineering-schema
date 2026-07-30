@@ -19,7 +19,7 @@
 
 import { execFileSync } from 'node:child_process'
 import { relative, resolve, sep } from 'node:path'
-import { loadTree } from './lib/load.mjs'
+import { loadTree, locksFor, LOCK_PATTERN } from './lib/load.mjs'
 
 // `--changed` is greedy, so everything before it is parsed first and everything
 // after it is a file path.
@@ -85,8 +85,9 @@ for (const raw of changed) {
     touch(parts[k - 1], 'knowledge', path)
     continue
   }
-  // knowledge.lock sits beside the knowledge directory, not inside it.
-  if (parts.length >= 2 && parts[parts.length - 1] === 'knowledge.lock') {
+  // Lock files sit beside the knowledge directory, not inside it, and may be
+  // per-stack (knowledge.python.lock).
+  if (parts.length >= 2 && LOCK_PATTERN.test(parts[parts.length - 1])) {
     touch(parts[parts.length - 2], 'knowledge', path)
     continue
   }
@@ -100,8 +101,8 @@ for (const [module, { knowledge, code }] of [...state].sort()) {
   if (!code.length) continue
   if (knowledge.length) continue // knowledge moved with the code, no drift
 
-  const lock = tree.locks.get(module)
-  const debt = lock?.data?.drift_debt
+  // With several stacks, any declared drift debt covers the module.
+  const debt = locksFor(module, tree).map((l) => l.data?.drift_debt).find(Boolean)
   findings.push({
     module,
     code,

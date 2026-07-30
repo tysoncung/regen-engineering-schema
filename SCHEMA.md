@@ -141,6 +141,29 @@ drift: none
 
 The lock file is what turns questions into queries: which modules were built from stale knowledge, which were built by last year's model, where has code drifted ahead of its source.
 
+### More than one implementation
+
+A module can have several implementations, for instance while migrating stacks or, as in the [demo](https://github.com/tysoncung/regen-engineering-demo), to prove that knowledge outlives any one of them. Provenance is per build, so each gets its own lock, named for its stack and carrying a matching `stack` field:
+
+```
+customer/knowledge.typescript.lock
+customer/knowledge.python.lock
+```
+
+```yaml
+module: customer
+stack: python
+knowledge_version: 4b81ce0
+generated_by: claude-fable-5
+generated_at: 2026-07-30
+contracts_passed: [CT-001, CT-002, CT-003]
+drift: knowledge-ahead
+```
+
+Validation requires the filename and the `stack` field to agree, and requires stack names once a module has more than one lock, since otherwise the two builds' provenance is ambiguous. Freshness is then reported per stack: one implementation can be current while another lags behind.
+
+A module with a single implementation keeps the plain `knowledge.lock` and needs no `stack` field.
+
 ## 7. Validation
 
 Two JSON Schemas ship with this repository:

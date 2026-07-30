@@ -8,6 +8,8 @@ import { parse as parseYaml } from 'yaml'
 
 export const IGNORED = new Set(['node_modules', '.git', 'dist', '.astro', '.next', 'coverage'])
 export const ITEM_DIRS = new Set(['rules', 'decisions', 'contracts', 'assumptions', 'nfr'])
+// knowledge.lock, or knowledge.<stack>.lock when a module has several stacks.
+export const LOCK_PATTERN = /^knowledge(?:\.([a-z0-9][a-z0-9-]*))?\.lock$/
 
 export function walk(dir, out = []) {
   for (const entry of readdirSync(dir)) {
@@ -67,9 +69,21 @@ export function loadTree(rootPath) {
   const problems = []
 
   for (const file of files) {
-    if (basename(file) === 'knowledge.lock') {
+    // `knowledge.lock`, or `knowledge.<stack>.lock` when a module has more than
+    // one implementation. Locks are keyed by module and stack so two stacks
+    // cannot silently overwrite each other's provenance.
+    const lockName = LOCK_PATTERN.exec(basename(file))
+    if (lockName) {
+      const module = basename(dirname(file))
+      const stack = lockName[1] ?? null
       try {
-        locks.set(basename(dirname(file)), { file: rel(file), data: parseYaml(readFileSync(file, 'utf8')) })
+        const data = parseYaml(readFileSync(file, 'utf8'))
+        locks.set(stack ? `${module}:${stack}` : module, {
+          file: rel(file),
+          data,
+          module,
+          stack: stack ?? data?.stack ?? null,
+        })
       } catch (e) {
         problems.push({ file: rel(file), msg: `lock file is not valid YAML: ${e.message}` })
       }
@@ -108,6 +122,11 @@ export function loadTree(rootPath) {
   }
 
   return { root, rel, files, modules, items, locks, problems }
+}
+
+/** Every lock belonging to a module. More than one means several stacks. */
+export function locksFor(module, tree) {
+  return [...tree.locks.values()].filter((l) => l.module === module)
 }
 
 /** Items that verify the given id, looked up from the contract side. */

@@ -36,7 +36,13 @@ const warn = (file, msg) => warnings.push({ file, msg })
 for (const [id, { file, data }] of tree.items)
   if (!validateItem(data)) err(file, `frontmatter schema: ${ajvErrors(validateItem)}`)
 
-for (const [module, { file, data }] of tree.locks) {
+const locksByModule = new Map()
+for (const lock of tree.locks.values()) {
+  if (!locksByModule.has(lock.module)) locksByModule.set(lock.module, [])
+  locksByModule.get(lock.module).push(lock)
+}
+
+for (const { file, data, module, stack } of tree.locks.values()) {
   if (!validateLock(data)) {
     err(file, `lock schema: ${ajvErrors(validateLock)}`)
     continue
@@ -45,6 +51,15 @@ for (const [module, { file, data }] of tree.locks) {
     err(file, `lock declares module "${data.module}" but sits in "${module}"`)
   if (!tree.modules.has(data.module))
     err(file, `lock names module "${data.module}" which does not exist`)
+  if (data.stack && stack && data.stack !== stack)
+    err(file, `lock declares stack "${data.stack}" but the filename says "${stack}"`)
+  // With several implementations, provenance is ambiguous unless each lock says
+  // which stack it describes.
+  if (locksByModule.get(module).length > 1 && !stack)
+    err(
+      file,
+      `module "${module}" has ${locksByModule.get(module).length} locks, so each must name its stack via knowledge.<stack>.lock`,
+    )
   for (const c of data.contracts_passed ?? [])
     if (!tree.items.has(c)) err(file, `contracts_passed references unknown contract ${c}`)
 }

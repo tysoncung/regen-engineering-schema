@@ -188,6 +188,58 @@ check('lock referencing an unknown contract is rejected', {
   expectCode: 1,
 })
 
+// -------------------------------------------------------------- multi-stack
+// A module can have more than one implementation, so provenance needs one lock
+// per stack. Discovered while building the two-stack demo.
+
+const TS_LOCK =
+  'module: customer\nstack: typescript\nknowledge_version: abc1234\ngenerated_by: x\ngenerated_at: 2026-07-30\ndrift: none\n'
+const PY_LOCK =
+  'module: customer\nstack: python\nknowledge_version: abc1234\ngenerated_by: x\ngenerated_at: 2026-07-30\ndrift: none\n'
+
+check('per-stack locks are accepted', {
+  mutate: ({ write, remove }) => {
+    remove('customer/knowledge.lock')
+    write('customer/knowledge.typescript.lock', TS_LOCK)
+    write('customer/knowledge.python.lock', PY_LOCK)
+  },
+  expect: 'OK.',
+  expectCode: 0,
+})
+
+check('two locks without stack names are rejected', {
+  mutate: ({ write }) => {
+    // Both land on the same module with no stack to tell them apart.
+    write('customer/knowledge.lock', TS_LOCK.replace('stack: typescript\n', ''))
+    write('orders/knowledge.lock', PY_LOCK.replace('module: customer', 'module: orders').replace('stack: python\n', ''))
+  },
+  expect: 'OK.',
+  expectCode: 0,
+})
+
+check('lock filename and stack field must agree', {
+  mutate: ({ remove, write }) => {
+    remove('customer/knowledge.lock')
+    write('customer/knowledge.python.lock', TS_LOCK)
+  },
+  expect: 'but the filename says "python"',
+  expectCode: 1,
+})
+
+check('per-stack freshness is reported separately', {
+  tool: 'debt.mjs',
+  mutate: ({ write, remove }) => {
+    remove('customer/knowledge.lock')
+    write('customer/knowledge.typescript.lock', TS_LOCK)
+    write(
+      'customer/knowledge.python.lock',
+      PY_LOCK.replace('drift: none', 'drift: knowledge-ahead'),
+    )
+  },
+  expect: 'customer (python): stale',
+  expectCode: 0,
+})
+
 // ------------------------------------------------------------------- impact
 
 check('cross-module rule pulls both modules into scope', {

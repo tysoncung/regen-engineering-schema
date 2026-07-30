@@ -12,6 +12,11 @@
       "minLength": 1,
       "description": "Module name. Must match the directory that owns this lock file."
     },
+    "stack": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Implementation this lock describes, e.g. typescript. Required when a module has more than one implementation, in which case each lock is named knowledge.<stack>.lock."
+    },
     "knowledge_version": {
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$",
