@@ -240,6 +240,72 @@ check('per-stack freshness is reported separately', {
   expectCode: 0,
 })
 
+// ------------------------------------------------------------ regenerability
+// Absence of a regeneration record must never read as a pass. That confusion is
+// the whole reason the metric exists.
+
+const withRegen = (extra) =>
+  `module: customer\nstack: typescript\nknowledge_version: abc1234\ngenerated_by: x\ngenerated_at: 2026-07-30\ndrift: none\n${extra}`
+
+check('a module never regenerated reads as unknown, not passing', {
+  tool: 'debt.mjs',
+  mutate: ({ remove, write }) => {
+    remove('customer/knowledge.lock')
+    write('customer/knowledge.typescript.lock', withRegen(''))
+  },
+  expect: 'never regenerated (unknown, not passing)',
+  expectCode: 0,
+})
+
+check('a recent pass counts toward regenerability', {
+  tool: 'debt.mjs',
+  mutate: ({ remove, write }) => {
+    remove('customer/knowledge.lock')
+    write(
+      'customer/knowledge.typescript.lock',
+      withRegen('last_regeneration:\n  at: 2026-07-30\n  model: m\n  result: pass\n  guesses: 2\n'),
+    )
+  },
+  expect: ['Regenerability', '2 unanswered question'],
+  expectCode: 0,
+})
+
+check('an old pass is reported stale', {
+  tool: 'debt.mjs',
+  mutate: ({ remove, write }) => {
+    remove('customer/knowledge.lock')
+    write(
+      'customer/knowledge.typescript.lock',
+      withRegen('last_regeneration:\n  at: 2020-01-01\n  model: m\n  result: pass\n'),
+    )
+  },
+  expect: 'past the 90d threshold',
+  expectCode: 0,
+})
+
+check('a failing regeneration is reported as failing', {
+  tool: 'debt.mjs',
+  mutate: ({ remove, write }) => {
+    remove('customer/knowledge.lock')
+    write(
+      'customer/knowledge.typescript.lock',
+      withRegen('last_regeneration:\n  at: 2026-07-30\n  model: m\n  result: fail\n  contracts_passed: 14\n  contracts_total: 17\n'),
+    )
+  },
+  expect: ['FAILING', '14/17'],
+  expectCode: 0,
+})
+
+check('an invalid regeneration result is rejected by the schema', {
+  mutate: ({ write }) =>
+    write(
+      'customer/knowledge.lock',
+      'module: customer\nknowledge_version: abc1234\ngenerated_by: x\ngenerated_at: 2026-07-30\ndrift: none\nlast_regeneration:\n  at: 2026-07-30\n  model: m\n  result: maybe\n',
+    ),
+  expect: 'lock schema:',
+  expectCode: 1,
+})
+
 // ------------------------------------------------------------------- impact
 
 check('cross-module rule pulls both modules into scope', {

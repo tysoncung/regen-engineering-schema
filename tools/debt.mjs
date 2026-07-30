@@ -100,6 +100,42 @@ for (const [id, { data }] of tree.items) {
   traceable.push({ id, verified, implemented, ok: verified && implemented })
 }
 
+// ------------------------------------------------------------ regenerability
+// The odd one out, and deliberately so. The other four are computed from files
+// in seconds. This one records the outcome of actually regenerating something,
+// which costs real money, and that is exactly what makes it honest: it is the
+// only metric that cannot be satisfied by tidy paperwork.
+//
+// Absence of a record must never read as a pass. A module nobody has ever
+// regenerated is unknown, not healthy.
+
+const STALE_DAYS = Number(
+  (argv.find((a) => a.startsWith('--stale=')) ?? '--stale=90').split('=')[1],
+)
+const today = new Date(process.env.REGEN_TODAY ?? Date.now())
+const daysSince = (iso) => Math.floor((today - new Date(iso)) / 86400000)
+
+const regenerability = []
+for (const lock of [...tree.locks.values()].sort((a, b) => a.file.localeCompare(b.file))) {
+  const label = lock.stack ? `${lock.module} (${lock.stack})` : lock.module
+  const r = lock.data?.last_regeneration
+  if (!r) {
+    regenerability.push({ target: label, state: 'unknown' })
+    continue
+  }
+  const age = daysSince(r.at)
+  const state = r.result !== 'pass' ? 'failing' : age > STALE_DAYS ? 'stale' : 'current'
+  regenerability.push({
+    target: label,
+    state,
+    age,
+    model: r.model,
+    guesses: r.guesses ?? null,
+    scenarios: r.contracts_passed != null ? `${r.contracts_passed}/${r.contracts_total ?? '?'}` : null,
+  })
+}
+const totalGuesses = regenerability.reduce((n, r) => n + (r.guesses ?? 0), 0)
+
 // ------------------------------------------------------------- under-linking
 // Missing links silently shrink the regeneration scope, which is the most
 // dangerous failure mode in the methodology because it produces confident,
@@ -132,11 +168,21 @@ const result = {
   },
   integrity: { codeAhead: integrity.length, detail: integrity },
   traceability: { ok: traceable.filter((t) => t.ok).length, total: traceable.length, detail: traceable },
+  regenerability: {
+    current: regenerability.filter((r) => r.state === 'current').length,
+    total: regenerability.length,
+    unknown: regenerability.filter((r) => r.state === 'unknown').length,
+    failing: regenerability.filter((r) => r.state === 'failing').length,
+    guesses: totalGuesses,
+    staleDays: STALE_DAYS,
+    detail: regenerability,
+  },
   gitAware: inGitRepo,
 }
 result.coverage.pct = pct(result.coverage.complete, result.coverage.total)
 result.freshness.pct = pct(result.freshness.current, result.freshness.total)
 result.traceability.pct = pct(result.traceability.ok, result.traceability.total)
+result.regenerability.pct = pct(result.regenerability.current, result.regenerability.total)
 
 if (json) {
   console.log(JSON.stringify(result, null, 2))
@@ -161,6 +207,17 @@ for (const i of integrity)
 console.log(`Traceability  ${bar(result.traceability.pct)} ${result.traceability.pct}%  ${result.traceability.ok}/${result.traceability.total} active rules`)
 for (const t of traceable.filter((t) => !t.ok))
   console.log(`                 ${t.id}: ${!t.verified ? 'no verifying contract' : ''}${!t.verified && !t.implemented ? ', ' : ''}${!t.implemented ? 'no implementing module' : ''}`)
+
+console.log(`Regenerability ${bar(result.regenerability.pct)} ${result.regenerability.pct}%  ${result.regenerability.current}/${result.regenerability.total} verified within ${STALE_DAYS}d`)
+for (const r of regenerability.filter((r) => r.state !== 'current')) {
+  if (r.state === 'unknown')
+    console.log(`                 ${r.target}: never regenerated (unknown, not passing)`)
+  else if (r.state === 'failing')
+    console.log(`                 ${r.target}: FAILING as of ${r.age}d ago${r.scenarios ? `, ${r.scenarios}` : ''}`)
+  else console.log(`                 ${r.target}: last passed ${r.age}d ago, past the ${STALE_DAYS}d threshold`)
+}
+if (totalGuesses > 0)
+  console.log(`                 ${totalGuesses} unanswered question(s) reported by regenerating agents`)
 
 if (underLinked.length) {
   console.log()

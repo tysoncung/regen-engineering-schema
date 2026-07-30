@@ -141,6 +141,26 @@ drift: none
 
 The lock file is what turns questions into queries: which modules were built from stale knowledge, which were built by last year's model, where has code drifted ahead of its source.
 
+### Recording a Regeneration Test
+
+When a module has been through the Regeneration Test, the outcome goes in its lock:
+
+```yaml
+last_regeneration:
+  at: 2026-07-31
+  model: claude-fable-5
+  result: pass
+  contracts_passed: 17
+  contracts_total: 17
+  guesses: 8
+```
+
+`guesses` is the count of questions the regenerating agent had to answer for itself, reported before it was scored. It matters as much as `result`: a pass with fifteen guesses is a module that got lucky, and those guesses are knowledge debt whether or not the contracts happened to catch them.
+
+**Absence of this block means never attempted, which is not the same as passing.** `regen-debt` reports it as unknown, and deliberately never counts it toward the metric. A module nobody has regenerated is not healthy, it is unmeasured.
+
+Note that the block describes a *run*, so if one regeneration covers several modules, the guess count belongs on one lock rather than being copied to each. Duplicating it inflates the total.
+
 ### More than one implementation
 
 A module can have several implementations, for instance while migrating stacks or, as in the [demo](https://github.com/tysoncung/regen-engineering-demo), to prove that knowledge outlives any one of them. Provenance is per build, so each gets its own lock, named for its stack and carrying a matching `stack` field:
@@ -211,6 +231,16 @@ npm run debt -- --json  # for CI job summaries
 ```
 
 Where the tree is a git repository, freshness is checked properly by comparing each lock's `knowledge_version` against the last commit that touched that module's knowledge. Otherwise it falls back to the `drift` field the lock declares.
+
+### Regenerability
+
+The fifth metric, and the odd one out. The other four are computed from files in seconds; this one records whether regeneration was actually attempted and whether it worked, which costs real money to establish. That is exactly what makes it honest: **it is the only measure that cannot be satisfied by tidy paperwork.**
+
+```bash
+regen-debt --stale=90    # days before a passing result is considered stale
+```
+
+States: `current` (passed within the window), `stale` (passed, but too long ago), `failing`, and `unknown` (never attempted). Unknown never counts as passing.
 
 The report also flags likely under-linking: an item whose prose cites an item owned by another module, while `affects` never mentions that module. Missing links are the most dangerous defect in a knowledge tree, because they silently shrink the regeneration scope and produce confident, incomplete work. Exit code is non-zero when any module has code-ahead drift.
 

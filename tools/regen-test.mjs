@@ -238,6 +238,37 @@ const result = {
   guesses,
 }
 
+// Record the outcome in the module's lock, so Regenerability is answerable
+// later without rerunning anything. Only when we actually scored something:
+// writing a record for an unscored run would turn "we did not check" into
+// "it passed", which is the failure this metric exists to prevent.
+if (score && moduleName) {
+  const lockName = stack ? `knowledge.${stack}.lock` : 'knowledge.lock'
+  const lockPath = join(treeRoot, moduleName, lockName)
+  if (existsSync(lockPath)) {
+    const guessCount = guesses ? guesses.split('\n').filter((l) => /^\s*[-*\d]/.test(l)).length : null
+    const block = [
+      'last_regeneration:',
+      `  at: ${result_at()}`,
+      `  model: ${(agentCmd ?? 'unknown').split(/\s+/)[0]}`,
+      `  result: ${score.passed ? 'pass' : 'fail'}`,
+      ...(score.scenarios != null ? [`  contracts_passed: ${score.scenarios}`] : []),
+      ...(score.total != null ? [`  contracts_total: ${score.total}`] : []),
+      ...(guessCount != null ? [`  guesses: ${guessCount}`] : []),
+      '',
+    ].join('\n')
+
+    const existing = readFileSync(lockPath, 'utf8')
+    const cleaned = existing.replace(/\nlast_regeneration:\n(?: {2}.*\n)*/g, '\n')
+    writeFileSync(lockPath, `${cleaned.trimEnd()}\n${block}`)
+    console.log(`\nRecorded in ${moduleName}/${lockName}`)
+  }
+}
+
+function result_at() {
+  return new Date().toISOString().slice(0, 10)
+}
+
 if (outPath) {
   mkdirSync(resolve(treeRoot, outPath, '..'), { recursive: true })
   writeFileSync(resolve(treeRoot, outPath), JSON.stringify(result, null, 2))
