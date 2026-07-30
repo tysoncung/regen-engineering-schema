@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://regen.engineering/schemas/0.1/knowledge-item.schema.json",
+  "title": "Regen Engineering knowledge item frontmatter",
+  "description": "YAML frontmatter of a single knowledge item file (business rule, decision, contract, assumption, or non-functional requirement).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "title", "status"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^(BR|ADR|CT|NFR|ASM)-[0-9]{3,}$",
+      "description": "Unique across the whole repository. Prefix must match type."
+    },
+    "type": {
+      "enum": ["business-rule", "decision", "contract", "assumption", "nfr"]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "status": {
+      "enum": ["draft", "active", "deprecated", "superseded"]
+    },
+    "since": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "affects": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true,
+      "description": "Module names whose behaviour depends on this item. The regeneration blast radius."
+    },
+    "implemented_by": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true,
+      "description": "Module names containing the implementation."
+    },
+    "verified_by": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^CT-[0-9]{3,}$" },
+      "uniqueItems": true,
+      "description": "Contract IDs that verify this item."
+    },
+    "verifies": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^(BR|NFR)-[0-9]{3,}$" },
+      "uniqueItems": true,
+      "minItems": 1,
+      "description": "Items this contract verifies. Contracts only, and required there."
+    },
+    "supersedes": {
+      "type": "string",
+      "pattern": "^(BR|ADR|CT|NFR|ASM)-[0-9]{3,}$"
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "business-rule" } }, "required": ["type"] },
+      "then": { "properties": { "id": { "pattern": "^BR-" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "decision" } }, "required": ["type"] },
+      "then": { "properties": { "id": { "pattern": "^ADR-" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "contract" } }, "required": ["type"] },
+      "then": {
+        "required": ["verifies"],
+        "properties": { "id": { "pattern": "^CT-" } }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "nfr" } }, "required": ["type"] },
+      "then": { "properties": { "id": { "pattern": "^NFR-" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "assumption" } }, "required": ["type"] },
+      "then": { "properties": { "id": { "pattern": "^ASM-" } } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "superseded" } }, "required": ["status"] },
+      "then": {
+        "description": "A superseded item should say nothing about what replaced it; the replacement points back via supersedes."
+      }
+    }
+  ]
+}

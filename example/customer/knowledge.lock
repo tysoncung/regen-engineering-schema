@@ -1,0 +1,6 @@
+module: customer
+knowledge_version: 9f3ac21
+generated_by: claude-fable-5
+generated_at: 2026-07-30
+contracts_passed: [CT-001, CT-002, CT-003]
+drift: none

@@ -1,0 +1,18 @@
+{
+  "name": "regen-engineering-schema",
+  "version": "0.1.0",
+  "description": "Knowledge schema and reference validator for Regen Engineering",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "regen-validate": "./tools/validate.mjs"
+  },
+  "scripts": {
+    "validate": "node tools/validate.mjs"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "yaml": "^2.5.0"
+  }
+}

@@ -1,0 +1,6 @@
+module: orders
+knowledge_version: 4b81ce0
+generated_by: claude-fable-5
+generated_at: 2026-07-28
+contracts_passed: [CT-010]
+drift: knowledge-ahead
