@@ -36,7 +36,7 @@ function run(tool, args = []) {
  * Copy the example to a scratch tree, apply `mutate`, run `tool`, and assert
  * the output matches. Each case is isolated, so one failure cannot leak.
  */
-function check(name, { mutate, tool = 'validate.mjs', args = [], expect, expectCode }) {
+function check(name, { mutate, tool = 'validate.mjs', args = [], argsFor, expect, expectCode }) {
   const dir = mkdtempSync(join(tmpdir(), 'regen-test-'))
   try {
     cpSync(EXAMPLE, dir, { recursive: true })
@@ -45,7 +45,7 @@ function check(name, { mutate, tool = 'validate.mjs', args = [], expect, expectC
       read: (rel) => readFileSync(join(dir, rel), 'utf8'),
       remove: (rel) => rmSync(join(dir, rel), { recursive: true, force: true }),
     })
-    const { code, out } = run(tool, [...args, dir])
+    const { code, out } = run(tool, argsFor ? argsFor(dir) : [...args, dir])
     const problems = []
     for (const e of [expect].flat().filter(Boolean))
       if (!out.includes(e)) problems.push(`expected output to contain ${JSON.stringify(e)}`)
@@ -240,6 +240,72 @@ check('missing knowledge package shows as incomplete coverage', {
   mutate: ({ remove }) => remove('orders/knowledge/overview.md'),
   expect: 'orders: missing overview.md',
   expectCode: 0,
+})
+
+// -------------------------------------------------------------------- drift
+// The rule is structural: implementation changed, knowledge did not.
+
+const drift = (name, files, { expect, expectCode, mutate, tool = 'drift.mjs' }) =>
+  check(name, {
+    tool,
+    mutate,
+    expect,
+    expectCode,
+    // `--changed` is greedy, so the tree has to be named before it.
+    argsFor: (dir) => (tool === 'drift.mjs' ? ['--tree', dir, '--changed', ...files] : [dir]),
+  })
+
+drift('code changed without knowledge is drift', ['customer/src/service.ts'], {
+  expect: 'DRIFT     customer',
+  expectCode: 1,
+})
+
+drift(
+  'code changed with its knowledge is not drift',
+  ['customer/src/service.ts', 'customer/knowledge/rules/BR-001.md'],
+  { expect: 'No code-ahead drift', expectCode: 0 },
+)
+
+drift('knowledge-only change is not drift', ['customer/knowledge/rules/BR-001.md'], {
+  expect: 'No code-ahead drift',
+  expectCode: 0,
+})
+
+drift('lock file counts as knowledge', ['customer/src/service.ts', 'customer/knowledge.lock'], {
+  expect: 'No code-ahead drift',
+  expectCode: 0,
+})
+
+drift('repo metadata is ignored', ['README.md', 'package.json'], {
+  expect: 'No code-ahead drift',
+  expectCode: 0,
+})
+
+drift(
+  'only the drifting module is reported',
+  ['customer/src/a.ts', 'customer/knowledge/rules/BR-001.md', 'orders/src/b.ts'],
+  { expect: 'DRIFT     orders', expectCode: 1 },
+)
+
+drift('declared drift debt unblocks the merge', ['customer/src/service.ts'], {
+  mutate: ({ write }) =>
+    write(
+      'customer/knowledge.lock',
+      'module: customer\nknowledge_version: abc1234\ngenerated_by: x\ngenerated_at: 2026-07-30\ndrift: code-ahead\ndrift_debt:\n  since: 2026-07-30\n  reason: hotfix for incident 4412\n  reconciliation_task: ENG-991\n',
+    ),
+  expect: 'ACCEPTED  customer',
+  expectCode: 0,
+})
+
+drift('drift debt still counts against integrity', [], {
+  mutate: ({ write }) =>
+    write(
+      'customer/knowledge.lock',
+      'module: customer\nknowledge_version: abc1234\ngenerated_by: x\ngenerated_at: 2026-07-30\ndrift: code-ahead\ndrift_debt:\n  since: 2026-07-30\n  reason: hotfix\n',
+    ),
+  expect: '1 code-ahead',
+  expectCode: 1,
+  tool: 'debt.mjs',
 })
 
 // ------------------------------------------------------------------ report

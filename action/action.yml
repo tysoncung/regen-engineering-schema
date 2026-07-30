@@ -1,0 +1,72 @@
+name: Regen Engineering knowledge check
+description: Validate a knowledge tree, block code-ahead drift, and post a knowledge debt report.
+author: Regen Engineering
+
+inputs:
+  tree:
+    description: Path to the knowledge tree.
+    required: false
+    default: '.'
+  base:
+    description: Base ref to diff against for drift detection.
+    required: false
+    default: ${{ github.event.pull_request.base.ref || 'main' }}
+  drift:
+    description: Fail the job on code-ahead drift. Set to false to report without blocking.
+    required: false
+    default: 'true'
+  debt:
+    description: Post the knowledge debt report to the job summary.
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Validate knowledge
+      shell: bash
+      run: |
+        echo "## Knowledge validation" >> "$GITHUB_STEP_SUMMARY"
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
+        node "${{ github.action_path }}/../tools/validate.mjs" "${{ inputs.tree }}" 2>&1 \
+          | tee -a "$GITHUB_STEP_SUMMARY"
+        code=${PIPESTATUS[0]}
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
+        exit $code
+
+    - name: Drift check
+      if: always()
+      shell: bash
+      run: |
+        # Drift needs the base ref present locally; actions/checkout is shallow by default.
+        git fetch --no-tags --depth=50 origin "${{ inputs.base }}" 2>/dev/null || true
+
+        echo "## Drift check" >> "$GITHUB_STEP_SUMMARY"
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
+        set +e
+        node "${{ github.action_path }}/../tools/drift.mjs" \
+          --tree "${{ inputs.tree }}" --base "origin/${{ inputs.base }}" 2>&1 \
+          | tee -a "$GITHUB_STEP_SUMMARY"
+        code=${PIPESTATUS[0]}
+        set -e
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+        if [ "$code" -ne 0 ] && [ "${{ inputs.drift }}" = "true" ]; then
+          echo "::error::Code-ahead drift. Implementation changed without its knowledge changing."
+          exit $code
+        fi
+        if [ "$code" -ne 0 ]; then
+          echo "::warning::Code-ahead drift detected, not blocking because drift input is false."
+        fi
+
+    - name: Knowledge debt report
+      if: always() && inputs.debt == 'true'
+      shell: bash
+      run: |
+        echo "## Knowledge debt" >> "$GITHUB_STEP_SUMMARY"
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
+        # Debt is a report, never a gate: it exits non-zero on code-ahead drift,
+        # which the drift step above has already accounted for.
+        node "${{ github.action_path }}/../tools/debt.mjs" "${{ inputs.tree }}" 2>&1 \
+          | tee -a "$GITHUB_STEP_SUMMARY" || true
+        echo '```' >> "$GITHUB_STEP_SUMMARY"

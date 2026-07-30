@@ -191,6 +191,48 @@ Where the tree is a git repository, freshness is checked properly by comparing e
 
 The report also flags likely under-linking: an item whose prose cites an item owned by another module, while `affects` never mentions that module. Missing links are the most dangerous defect in a knowledge tree, because they silently shrink the regeneration scope and produce confident, incomplete work. Exit code is non-zero when any module has code-ahead drift.
 
+### Drift check
+
+Drift is divergence between knowledge and implementation, and it has a direction. Knowledge ahead of code is a backlog and perfectly healthy. Code ahead of knowledge is a defect: something is true of the running system that the source of truth does not know.
+
+Detection is structural, not semantic. If a change touches a module's non-knowledge files and contains no corresponding change to that module's knowledge, that is code-ahead drift. No understanding of the code is required, only the observation that a build artifact changed while its source did not.
+
+```bash
+node tools/drift.mjs --base main             # diff against a branch
+node tools/drift.mjs --tree example --changed a.ts b.md
+```
+
+This over-reports by design: a pure refactor trips it too. Deciding whether a change is behavioural is human judgment, and the escape hatch is explicit rather than silent. Declaring `drift_debt` in the module's lock unblocks the merge while keeping the debt visible, because `debt.mjs` still counts it against integrity:
+
+```yaml
+drift: code-ahead
+drift_debt:
+  since: 2026-07-30
+  reason: hotfix for incident 4412, payment retry loop
+  reconciliation_task: ENG-991
+```
+
+An emergency hatch that hid the debt would be rot with paperwork. This one does not hide it.
+
+### Continuous integration
+
+A composite action is included:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0        # drift needs history to diff against the base ref
+- uses: actions/setup-node@v4
+  with:
+    node-version: 22
+- uses: tysoncung/regen-engineering-schema/action@main
+  with:
+    tree: .
+    drift: 'true'         # 'false' to report without blocking
+```
+
+It validates the tree, blocks code-ahead drift, and posts the debt report to the job summary. Note that debt is always a report and never a gate; only validation and drift can fail a build.
+
 ## 8. Versioning
 
 This schema follows semver. Additive, backward-compatible changes bump the minor version; anything that breaks an existing knowledge tree bumps the major and must ship with migration notes. `knowledge.lock` may gain a `schema_version` field when there are two versions in the wild to distinguish; v0.1 omits it on purpose.

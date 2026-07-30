@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Drift detection diffs against the base ref, so it needs history.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci || npm install
+
+      - name: Tooling tests
+        run: npm test
+
+      - name: Validate the example knowledge tree
+        run: npm run validate
+
+      - name: Knowledge debt report
+        if: always()
+        run: |
+          echo '## Knowledge debt (example tree)' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          node tools/debt.mjs example 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Drift check
+        if: github.event_name == 'pull_request'
+        run: node tools/drift.mjs --tree example --base "origin/${{ github.base_ref }}"
