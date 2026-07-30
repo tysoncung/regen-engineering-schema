@@ -167,6 +167,30 @@ npm run validate -- <path>  # validates any knowledge tree
 
 Exit code is non-zero on any error, so it drops into CI as-is.
 
+### Impact analysis
+
+Computing the regeneration scope is deterministic graph traversal, not a judgment call, which is why it is a script rather than a prompt. Given a changed item, it reports the modules to regenerate and the contracts that must pass afterwards.
+
+```bash
+npm run impact -- BR-002              # scope of a knowledge change
+npm run impact -- --module customer   # everything asserted about a module
+npm run impact -- --changed <files>   # map a git diff back to scope
+npm run impact -- BR-002 --json       # machine-readable, for agents and CI
+```
+
+Contracts in scope are not only those verifying the changed item: every contract belonging to a module in scope must also pass, which is what stops a regeneration from quietly breaking a rule nobody edited.
+
+### Knowledge debt
+
+```bash
+npm run debt            # the four metrics
+npm run debt -- --json  # for CI job summaries
+```
+
+Where the tree is a git repository, freshness is checked properly by comparing each lock's `knowledge_version` against the last commit that touched that module's knowledge. Otherwise it falls back to the `drift` field the lock declares.
+
+The report also flags likely under-linking: an item whose prose cites an item owned by another module, while `affects` never mentions that module. Missing links are the most dangerous defect in a knowledge tree, because they silently shrink the regeneration scope and produce confident, incomplete work. Exit code is non-zero when any module has code-ahead drift.
+
 ## 8. Versioning
 
 This schema follows semver. Additive, backward-compatible changes bump the minor version; anything that breaks an existing knowledge tree bumps the major and must ship with migration notes. `knowledge.lock` may gain a `schema_version` field when there are two versions in the wild to distinguish; v0.1 omits it on purpose.

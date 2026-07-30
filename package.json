@@ -5,10 +5,15 @@
   "type": "module",
   "license": "MIT",
   "bin": {
-    "regen-validate": "./tools/validate.mjs"
+    "regen-validate": "./tools/validate.mjs",
+    "regen-impact": "./tools/impact.mjs",
+    "regen-debt": "./tools/debt.mjs"
   },
   "scripts": {
-    "validate": "node tools/validate.mjs"
+    "validate": "node tools/validate.mjs",
+    "impact": "node tools/impact.mjs",
+    "debt": "node tools/debt.mjs",
+    "test": "node tools/test.mjs"
   },
   "dependencies": {
     "ajv": "^8.17.1",
