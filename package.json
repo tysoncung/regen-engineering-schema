@@ -8,14 +8,18 @@
     "regen-validate": "./tools/validate.mjs",
     "regen-impact": "./tools/impact.mjs",
     "regen-debt": "./tools/debt.mjs",
-    "regen-drift": "./tools/drift.mjs"
+    "regen-drift": "./tools/drift.mjs",
+    "regen-test": "./tools/regen-test.mjs",
+    "regen-graph": "./tools/graph.mjs"
   },
   "scripts": {
     "validate": "node tools/validate.mjs",
     "impact": "node tools/impact.mjs",
     "debt": "node tools/debt.mjs",
     "drift": "node tools/drift.mjs",
-    "test": "node tools/test.mjs"
+    "test": "node tools/test.mjs",
+    "graph": "node tools/graph.mjs",
+    "regen-test": "node tools/regen-test.mjs"
   },
   "dependencies": {
     "ajv": "^8.17.1",
