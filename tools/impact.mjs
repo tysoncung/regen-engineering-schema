@@ -109,6 +109,32 @@ if (json) {
   process.exit(0)
 }
 
+// The blast radius as a picture. GitHub renders mermaid fences natively in
+// READMEs and job summaries, so this drops straight into a PR comment.
+if (argv.includes('--graph')) {
+  console.log('```mermaid')
+  console.log('flowchart LR')
+  for (const id of result.seeds) {
+    const t = tree.items.get(id)?.data.title ?? ''
+    console.log(`  ${id}["${id}<br/>${t.slice(0, 34).replace(/"/g, "'")}"]:::seed`)
+  }
+  for (const m of result.modules) console.log(`  mod_${m}[("${m}")]:::mod`)
+  for (const c of result.contracts) console.log(`  ${c}{{"${c}"}}`)
+  for (const id of result.seeds) {
+    const d = tree.items.get(id)?.data ?? {}
+    for (const m of d.affects ?? []) if (scope.has(m)) console.log(`  ${id} -..-> mod_${m}`)
+    for (const m of d.implemented_by ?? []) if (scope.has(m)) console.log(`  ${id} --> mod_${m}`)
+  }
+  for (const c of result.contracts) {
+    const d = tree.items.get(c)?.data ?? {}
+    for (const v of d.verifies ?? []) if (seedIds.has(v)) console.log(`  ${c} ==> ${v}`)
+  }
+  console.log('  classDef seed stroke:#2c7a58,stroke-width:2px;')
+  console.log('  classDef mod fill:#e6f2ec,stroke:#2c7a58;')
+  console.log('```')
+  process.exit(0)
+}
+
 console.log(`Regeneration scope for: ${result.seeds.join(', ') || '(nothing)'}`)
 console.log()
 if (result.modules.length) {
