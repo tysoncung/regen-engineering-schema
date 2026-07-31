@@ -5,7 +5,7 @@
 //
 //   node tools/validate.mjs [tree]
 
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join, dirname, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 // The default ajv export only understands draft-07; the schemas here declare
@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url'
 import Ajv from 'ajv/dist/2020.js'
 import addFormats from 'ajv-formats'
 import { loadTree, isVerified } from './lib/load.mjs'
+import { checkModuleInterface } from './lib/openapi.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const SCHEMA_DIR = join(HERE, '..', 'schemas')
@@ -62,6 +63,19 @@ for (const { file, data, module, stack } of tree.locks.values()) {
     )
   for (const c of data.contracts_passed ?? [])
     if (!tree.items.has(c)) err(file, `contracts_passed references unknown contract ${c}`)
+}
+
+// ------------------------------------------------------------- interfaces
+// REP-0002: a module documenting an HTTP interface must carry a machine-
+// readable contract, and the prose summary must agree with it.
+
+for (const module of tree.modules) {
+  const moduleDir = join(tree.root, module)
+  const overviewPath = join(moduleDir, 'knowledge', 'overview.md')
+  const overview = existsSync(overviewPath) ? readFileSync(overviewPath, 'utf8') : ''
+  const result = checkModuleInterface(moduleDir, overview)
+  for (const msg of result.errors) err(`${module}/knowledge/overview.md`, msg)
+  for (const msg of result.warnings) warn(`${module}/knowledge/overview.md`, msg)
 }
 
 // ---------------------------------------------------------------- graph
