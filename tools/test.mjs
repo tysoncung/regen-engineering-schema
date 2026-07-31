@@ -240,6 +240,81 @@ check('per-stack freshness is reported separately', {
   expectCode: 0,
 })
 
+// --------------------------------------------------------------- interfaces
+// REP-0002: prose interface tables require a machine-readable contract, and
+// the two must agree.
+
+const OPENAPI_MIN = `openapi: 3.0.3
+info: { title: t, version: 0.0.0 }
+paths:
+  /things:
+    post:
+      responses: { '201': { description: ok } }
+`
+
+const OVERVIEW_WITH_TABLE = `# T
+
+## Interface
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | \`/things\` | Create. 201 |
+`
+
+check('an interface table without api.openapi.yaml is rejected', {
+  mutate: ({ write }) => write('customer/knowledge/overview.md', OVERVIEW_WITH_TABLE),
+  expect: 'no api.openapi.yaml',
+  expectCode: 1,
+})
+
+check('a matching table and contract pass', {
+  mutate: ({ write }) => {
+    write('customer/knowledge/overview.md', OVERVIEW_WITH_TABLE)
+    write('customer/knowledge/api.openapi.yaml', OPENAPI_MIN)
+  },
+  expect: 'OK.',
+  expectCode: 0,
+})
+
+check('a prose row the contract lacks is rejected', {
+  mutate: ({ write }) => {
+    write(
+      'customer/knowledge/overview.md',
+      OVERVIEW_WITH_TABLE + '| DELETE | \`/things/{id}\` | Remove. 204 |\n',
+    )
+    write('customer/knowledge/api.openapi.yaml', OPENAPI_MIN)
+  },
+  expect: 'has no such operation',
+  expectCode: 1,
+})
+
+check('parameter names may differ between prose and contract', {
+  mutate: ({ write }) => {
+    write(
+      'customer/knowledge/overview.md',
+      OVERVIEW_WITH_TABLE + '| GET | \`/things/{thingId}\` | Fetch. 200 |\n',
+    )
+    write(
+      'customer/knowledge/api.openapi.yaml',
+      OPENAPI_MIN + `  /things/{id}:
+    get:
+      responses: { '200': { description: ok } }
+`,
+    )
+  },
+  expect: 'OK.',
+  expectCode: 0,
+})
+
+check('an unparseable api.openapi.yaml is rejected', {
+  mutate: ({ write }) => {
+    write('customer/knowledge/overview.md', OVERVIEW_WITH_TABLE)
+    write('customer/knowledge/api.openapi.yaml', 'paths: [unclosed')
+  },
+  expect: 'not valid YAML',
+  expectCode: 1,
+})
+
 // ------------------------------------------------------------ regenerability
 // Absence of a regeneration record must never read as a pass. That confusion is
 // the whole reason the metric exists.

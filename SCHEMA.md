@@ -1,6 +1,6 @@
 # Regen Engineering Knowledge Schema
 
-Version 0.1.0 (draft, 2026-07-30)
+Version 0.2.0 (draft, 2026-07-31)
 
 This document defines how knowledge is laid out, formatted, linked, and validated in a Regen Engineering repository. It is deliberately small: it should take about twenty minutes to read, and it invents no new file formats. Everything is Markdown with YAML frontmatter, plus two JSON Schemas for validation.
 
@@ -24,7 +24,7 @@ knowledge/                      global knowledge
   decisions/ADR-*.md            module-local decisions
   assumptions/ASM-*.md          things believed but not guaranteed
   contracts/CT-*.md             behavioural contracts (see section 5)
-  api.openapi.yaml              interface contract, when the module exposes an API
+  api.openapi.yaml              interface contract, REQUIRED when the module exposes an API
   knowledge.lock                regeneration lineage (see section 6)
 ```
 
@@ -285,6 +285,30 @@ A composite action is included:
 ```
 
 It validates the tree, blocks code-ahead drift, and posts the debt report to the job summary. Note that debt is always a report and never a gate; only validation and drift can fail a build.
+
+## 7b. Interface contracts (REP-0002, new in 0.2.0)
+
+A module whose `overview.md` documents an HTTP interface **must** include `api.openapi.yaml` in its knowledge package. The prose table becomes a human summary; where the two disagree, the OpenAPI file is authoritative and validation flags the disagreement.
+
+Why this is required rather than recommended: an honest Regeneration Test on the reference demo failed exclusively on wire-format questions the prose never answered, and a contract exercised an endpoint no overview documented. Business logic survives regeneration when written as prose; interface shape does not. The full evidence is in REP-0002.
+
+What the validator checks:
+
+1. An interface table in `overview.md` with no `api.openapi.yaml` is an error
+2. Every prose table row must exist in the OpenAPI file (parameter names may differ; path shape may not)
+3. A contract file that summarises far less than the OpenAPI defines draws a staleness warning
+
+The check that catches a contract exercising an undocumented operation lives at the contract-runner level, since prose scenarios cannot be matched to paths mechanically but a runner's step registry knows exactly which operations it calls. The reference runner asserts at startup that every operation it uses is documented, with `/health` and `/reset` exempt as testability affordances.
+
+### Migration from 0.1.x
+
+Breaking only for modules that document an HTTP interface in prose without an OpenAPI file. To migrate:
+
+1. Write `api.openapi.yaml` covering at least every row of the prose table, including response schemas and error bodies. The wire-format questions a regenerating agent would otherwise guess at (envelopes, field names, status codes for edge cases) are exactly what belongs here.
+2. Add a line to the overview declaring the OpenAPI file authoritative.
+3. Re-run `regen-validate`.
+
+Modules with no HTTP interface need nothing.
 
 ## 8. Versioning
 
