@@ -6,7 +6,7 @@
 // tools notice. Run with `npm test`.
 
 import { execFileSync } from 'node:child_process'
-import { cpSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs'
+import { cpSync, mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -41,7 +41,10 @@ function check(name, { mutate, tool = 'validate.mjs', args = [], argsFor, expect
   try {
     cpSync(EXAMPLE, dir, { recursive: true })
     mutate?.({
-      write: (rel, body) => writeFileSync(join(dir, rel), body),
+      write: (rel, body) => {
+        mkdirSync(dirname(join(dir, rel)), { recursive: true })
+        writeFileSync(join(dir, rel), body)
+      },
       read: (rel) => readFileSync(join(dir, rel), 'utf8'),
       remove: (rel) => rmSync(join(dir, rel), { recursive: true, force: true }),
     })
@@ -499,6 +502,47 @@ drift('drift debt still counts against integrity', [], {
   expect: '1 code-ahead',
   expectCode: 1,
   tool: 'debt.mjs',
+})
+
+// -------------------------------------------------------------- REP-0004
+
+check('risk and issue items validate with their fields', {
+  mutate: ({ write }) => {
+    write('customer/knowledge/risks/RISK-900.md',
+      '---\nid: RISK-900\ntype: risk\ntitle: A risk\nstatus: active\nlikelihood: high\nimpact: low\nmitigation: do less\naffects: [customer]\n---\nbody\n')
+    write('customer/knowledge/issues/ISS-900.md',
+      '---\nid: ISS-900\ntype: issue\ntitle: An issue\nstatus: active\nowner: someone\n---\nbody\n')
+  },
+  expect: 'OK.',
+  expectCode: 0,
+})
+
+check('likelihood on a non-risk is rejected', {
+  mutate: ({ write }) =>
+    write('customer/knowledge/rules/BR-950.md',
+      '---\nid: BR-950\ntype: business-rule\ntitle: Not a risk\nstatus: active\nlikelihood: high\nverified_by: [CT-001]\n---\nbody\n'),
+  expect: 'must match "then" schema',
+  expectCode: 1,
+})
+
+check('raid document derives and marks gaps honestly', {
+  tool: 'docs.mjs',
+  argsFor: (dir) => ['raid', dir],
+  mutate: ({ write }) =>
+    write('customer/knowledge/risks/RISK-901.md',
+      '---\nid: RISK-901\ntype: risk\ntitle: Unmitigated risk\nstatus: active\n---\nbody\n'),
+  expect: ['RISK-901', 'No mitigation recorded', 'No open issues recorded'],
+  expectCode: 0,
+})
+
+check('traceability marks requirements without contracts as gaps', {
+  tool: 'docs.mjs',
+  argsFor: (dir) => ['traceability', dir],
+  mutate: ({ write }) =>
+    write('customer/knowledge/rules/BR-951.md',
+      '---\nid: BR-951\ntype: business-rule\ntitle: Untraced rule\nstatus: active\nimplemented_by: [customer]\n---\nbody\n'),
+  expect: ['BR-951', 'GAP: no verifying contract'],
+  expectCode: 0,
 })
 
 // ------------------------------------------------------------------ report

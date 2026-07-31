@@ -1,6 +1,6 @@
 # Regen Engineering Knowledge Schema
 
-Version 0.2.0 (draft, 2026-07-31)
+Version 0.3.0 (draft, 2026-07-31)
 
 This document defines how knowledge is laid out, formatted, linked, and validated in a Regen Engineering repository. It is deliberately small: it should take about twenty minutes to read, and it invents no new file formats. Everything is Markdown with YAML frontmatter, plus two JSON Schemas for validation.
 
@@ -69,6 +69,10 @@ Do not maintain parallel `.md` and `.yaml` copies of the same knowledge. Two cop
 | `verified_by` | no | id[] | Contract IDs (`CT-*`) that verify this item |
 | `verifies` | contracts only | id[] | The `BR-*` or `NFR-*` items this contract verifies. Required on contracts |
 | `supersedes` | no | id | The item this one replaces |
+| `depends_on` | no | string[] | Free-form dependency names: modules, external services, libraries, teams. Deliberately unvalidated, because the important dependencies are outside the repository (REP-0004) |
+| `likelihood`, `impact` | risks only | enum | `low`, `medium`, `high`. Coarse on purpose |
+| `mitigation` | risks only | string | One line; the body carries the detail |
+| `owner` | issues only | string | Who is dealing with it |
 
 Unknown fields are rejected by validation. That is strictness as a feature: a typo like `affets` should fail loudly, not silently drop a link from the graph.
 
@@ -81,6 +85,8 @@ Unknown fields are rejected by validation. That is strictness as a feature: a ty
 | `CT-` | contract | `CT-101` |
 | `NFR-` | nfr | `NFR-002` |
 | `ASM-` | assumption | `ASM-001` |
+| `RISK-` | risk | `RISK-001` (REP-0004; optional `likelihood`, `impact`, `mitigation`) |
+| `ISS-` | issue | `ISS-001` (REP-0004; optional `owner`) |
 
 IDs are unique across the repository, not per module, so a link never needs qualifying. The prefix must match the item's `type`; validation enforces this. IDs are never reused: a deleted rule's ID stays retired, which keeps history and old lock files meaningful.
 
@@ -309,6 +315,22 @@ Breaking only for modules that document an HTTP interface in prose without an Op
 3. Re-run `regen-validate`.
 
 Modules with no HTTP interface need nothing.
+
+## 7c. Generated documents (REP-0004)
+
+`regen-docs` renders the documents enterprises are obliged to write, from knowledge that already exists:
+
+```bash
+regen-docs requirements    # functional + non-functional requirements, assumptions
+regen-docs hld             # modules, decisions, cross-module surface
+regen-docs dld --module customer
+regen-docs raid            # risks, assumptions, issues, dependencies
+regen-docs traceability    # requirement -> implementation -> contract matrix
+```
+
+The cardinal rule: **derive, never invent**. Where knowledge is silent the output says "Not specified", because a generated document that fills gaps with plausible prose launders absence into apparent completeness. Every statement carries its source id, output carries a generation stamp, and generated files are build artifacts that must never be committed into the knowledge tree.
+
+The traceability matrix is the same audit trail regulated industries maintain by hand; here it falls out of links people were already writing, and gaps print as gaps.
 
 ## 8. Versioning
 

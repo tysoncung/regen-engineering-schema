@@ -5,15 +5,28 @@
   "description": "YAML frontmatter of a single knowledge item file (business rule, decision, contract, assumption, or non-functional requirement).",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "type", "title", "status"],
+  "required": [
+    "id",
+    "type",
+    "title",
+    "status"
+  ],
   "properties": {
     "id": {
       "type": "string",
-      "pattern": "^(BR|ADR|CT|NFR|ASM)-[0-9]{3,}$",
+      "pattern": "^(BR|ADR|CT|NFR|ASM|RISK|ISS)-[0-9]{3,}$",
       "description": "Unique across the whole repository. Prefix must match type."
     },
     "type": {
-      "enum": ["business-rule", "decision", "contract", "assumption", "nfr"]
+      "enum": [
+        "business-rule",
+        "decision",
+        "contract",
+        "assumption",
+        "nfr",
+        "risk",
+        "issue"
+      ]
     },
     "title": {
       "type": "string",
@@ -21,7 +34,12 @@
       "maxLength": 120
     },
     "status": {
-      "enum": ["draft", "active", "deprecated", "superseded"]
+      "enum": [
+        "draft",
+        "active",
+        "deprecated",
+        "superseded"
+      ]
     },
     "since": {
       "type": "string",
@@ -30,62 +48,265 @@
     },
     "affects": {
       "type": "array",
-      "items": { "type": "string", "minLength": 1 },
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "uniqueItems": true,
       "description": "Module names whose behaviour depends on this item. The regeneration blast radius."
     },
     "implemented_by": {
       "type": "array",
-      "items": { "type": "string", "minLength": 1 },
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "uniqueItems": true,
       "description": "Module names containing the implementation."
     },
     "verified_by": {
       "type": "array",
-      "items": { "type": "string", "pattern": "^CT-[0-9]{3,}$" },
+      "items": {
+        "type": "string",
+        "pattern": "^CT-[0-9]{3,}$"
+      },
       "uniqueItems": true,
       "description": "Contract IDs that verify this item."
     },
     "verifies": {
       "type": "array",
-      "items": { "type": "string", "pattern": "^(BR|NFR)-[0-9]{3,}$" },
+      "items": {
+        "type": "string",
+        "pattern": "^(BR|NFR)-[0-9]{3,}$"
+      },
       "uniqueItems": true,
       "minItems": 1,
       "description": "Items this contract verifies. Contracts only, and required there."
     },
     "supersedes": {
       "type": "string",
-      "pattern": "^(BR|ADR|CT|NFR|ASM)-[0-9]{3,}$"
+      "pattern": "^(BR|ADR|CT|NFR|ASM|RISK|ISS)-[0-9]{3,}$"
+    },
+    "likelihood": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "description": "Risks only."
+    },
+    "impact": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "description": "Risks only."
+    },
+    "mitigation": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Risks only. One line; the body carries the detail."
+    },
+    "owner": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Issues only. Who is dealing with it."
+    },
+    "depends_on": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true,
+      "description": "Free-form dependency names: modules, external services, libraries, teams. Deliberately not validated against the module list, because the important dependencies are outside the repository."
     }
   },
   "allOf": [
     {
-      "if": { "properties": { "type": { "const": "business-rule" } }, "required": ["type"] },
-      "then": { "properties": { "id": { "pattern": "^BR-" } } }
-    },
-    {
-      "if": { "properties": { "type": { "const": "decision" } }, "required": ["type"] },
-      "then": { "properties": { "id": { "pattern": "^ADR-" } } }
-    },
-    {
-      "if": { "properties": { "type": { "const": "contract" } }, "required": ["type"] },
+      "if": {
+        "properties": {
+          "type": {
+            "const": "business-rule"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
       "then": {
-        "required": ["verifies"],
-        "properties": { "id": { "pattern": "^CT-" } }
+        "properties": {
+          "id": {
+            "pattern": "^BR-"
+          }
+        }
       }
     },
     {
-      "if": { "properties": { "type": { "const": "nfr" } }, "required": ["type"] },
-      "then": { "properties": { "id": { "pattern": "^NFR-" } } }
+      "if": {
+        "properties": {
+          "type": {
+            "const": "decision"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "id": {
+            "pattern": "^ADR-"
+          }
+        }
+      }
     },
     {
-      "if": { "properties": { "type": { "const": "assumption" } }, "required": ["type"] },
-      "then": { "properties": { "id": { "pattern": "^ASM-" } } }
+      "if": {
+        "properties": {
+          "type": {
+            "const": "contract"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "required": [
+          "verifies"
+        ],
+        "properties": {
+          "id": {
+            "pattern": "^CT-"
+          }
+        }
+      }
     },
     {
-      "if": { "properties": { "status": { "const": "superseded" } }, "required": ["status"] },
+      "if": {
+        "properties": {
+          "type": {
+            "const": "nfr"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "id": {
+            "pattern": "^NFR-"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "assumption"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "id": {
+            "pattern": "^ASM-"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "superseded"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
       "then": {
         "description": "A superseded item should say nothing about what replaced it; the replacement points back via supersedes."
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "risk"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "id": {
+            "pattern": "^RISK-"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "issue"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "id": {
+            "pattern": "^ISS-"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "likelihood": {}
+        },
+        "required": [
+          "likelihood"
+        ]
+      },
+      "then": {
+        "properties": {
+          "type": {
+            "const": "risk"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "owner": {}
+        },
+        "required": [
+          "owner"
+        ]
+      },
+      "then": {
+        "properties": {
+          "type": {
+            "const": "issue"
+          }
+        }
       }
     }
   ]

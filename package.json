@@ -1,6 +1,6 @@
 {
   "name": "regen-engineering-schema",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Knowledge schema and reference validator for Regen Engineering",
   "type": "module",
   "license": "MIT",
@@ -10,7 +10,8 @@
     "regen-debt": "./tools/debt.mjs",
     "regen-drift": "./tools/drift.mjs",
     "regen-test": "./tools/regen-test.mjs",
-    "regen-graph": "./tools/graph.mjs"
+    "regen-graph": "./tools/graph.mjs",
+    "regen-docs": "./tools/docs.mjs"
   },
   "scripts": {
     "validate": "node tools/validate.mjs",
@@ -19,7 +20,8 @@
     "drift": "node tools/drift.mjs",
     "test": "node tools/test.mjs",
     "graph": "node tools/graph.mjs",
-    "regen-test": "node tools/regen-test.mjs"
+    "regen-test": "node tools/regen-test.mjs",
+    "docs": "node tools/docs.mjs"
   },
   "dependencies": {
     "ajv": "^8.17.1",

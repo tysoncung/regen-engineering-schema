@@ -7,7 +7,7 @@ import { join, resolve, relative, basename, dirname, sep } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 
 export const IGNORED = new Set(['node_modules', '.git', 'dist', '.astro', '.next', 'coverage'])
-export const ITEM_DIRS = new Set(['rules', 'decisions', 'contracts', 'assumptions', 'nfr'])
+export const ITEM_DIRS = new Set(['rules', 'decisions', 'contracts', 'assumptions', 'nfr', 'risks', 'issues'])
 // knowledge.lock, or knowledge.<stack>.lock when a module has several stacks.
 export const LOCK_PATTERN = /^knowledge(?:\.([a-z0-9][a-z0-9-]*))?\.lock$/
 
@@ -34,7 +34,7 @@ export function readFrontmatter(file) {
   }
 }
 
-export const ID_PATTERN = /\b(?:BR|ADR|CT|NFR|ASM)-[0-9]{3,}\b/g
+export const ID_PATTERN = /\b(?:BR|ADR|CT|NFR|ASM|RISK|ISS)-[0-9]{3,}\b/g
 
 /** The module a knowledge item belongs to, or null for global knowledge. */
 export function ownerOf(item) {
