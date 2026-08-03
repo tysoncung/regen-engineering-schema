@@ -27,5 +27,31 @@
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "yaml": "^2.5.0"
-  }
+  },
+  "files": [
+    "schemas/",
+    "tools/",
+    "SCHEMA.md",
+    "LICENSE",
+    "README.md",
+    "example/"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tysoncung/regen-engineering-schema.git"
+  },
+  "homepage": "https://regen.engineering",
+  "bugs": {
+    "url": "https://github.com/tysoncung/regen-engineering-schema/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "regen-engineering",
+    "knowledge",
+    "schema",
+    "regeneration",
+    "openapi"
+  ]
 }
