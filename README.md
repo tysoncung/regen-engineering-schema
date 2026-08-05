@@ -18,6 +18,10 @@ BR-002 ──affects──────► customer, orders      (regeneration bl
        ──verified_by───► CT-002               (what proves it still holds)
 ```
 
+## Not on npm yet
+
+**Do not run `npx regen-<anything>`.** None of these names are published, so npx would resolve them from the public registry to whatever a stranger has uploaded under that name, and run it. Clone this repository and call the tools by path until an official package exists.
+
 ## Try it
 
 ```bash
