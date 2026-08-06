@@ -36,7 +36,7 @@ function run(tool, args = []) {
  * Copy the example to a scratch tree, apply `mutate`, run `tool`, and assert
  * the output matches. Each case is isolated, so one failure cannot leak.
  */
-function check(name, { mutate, tool = 'validate.mjs', args = [], argsFor, expect, expectCode }) {
+function check(name, { mutate, tool = 'validate.mjs', args = [], argsFor, expect, reject, expectCode }) {
   const dir = mkdtempSync(join(tmpdir(), 'regen-test-'))
   try {
     cpSync(EXAMPLE, dir, { recursive: true })
@@ -52,6 +52,8 @@ function check(name, { mutate, tool = 'validate.mjs', args = [], argsFor, expect
     const problems = []
     for (const e of [expect].flat().filter(Boolean))
       if (!out.includes(e)) problems.push(`expected output to contain ${JSON.stringify(e)}`)
+    for (const e of [reject].flat().filter(Boolean))
+      if (out.includes(e)) problems.push(`expected output NOT to contain ${JSON.stringify(e)}`)
     if (expectCode !== undefined && code !== expectCode)
       problems.push(`expected exit ${expectCode}, got ${code}`)
 
@@ -583,6 +585,123 @@ drift(
     expectCode: 0,
   },
 )
+
+// ----------------------------------------------------------- librarian
+// The Librarian reports candidates rather than verdicts, so it always exits 0.
+// What matters is what it notices and, at least as much, what it does not:
+// half of these assert silence, because a corpus tool that cries wolf gets
+// switched off and then catches nothing at all.
+
+const librarian = (name, opts) => check(`librarian: ${name}`, { tool: 'librarian.mjs', expectCode: 0, ...opts })
+
+const rule = (id, title, body) =>
+  `---\nid: ${id}\ntype: business-rule\ntitle: ${title}\nstatus: active\naffects: [customer]\nimplemented_by: [customer]\n---\n${body}\n`
+
+librarian('clean example reads without error', { expect: 'Librarian: read' })
+
+// The real case, reduced: the reference demo shipped a rule capping the address
+// book at twenty alongside one describing a response of fifty. Both files were
+// individually valid, so validation passed and nothing noticed for days.
+librarian('an upper bound that another rule exceeds is tension', {
+  mutate: ({ write }) => {
+    write('customer/knowledge/rules/BR-910.md', rule('BR-910', 'Address book size', 'A customer holds at most twenty addresses.'))
+    write('customer/knowledge/rules/BR-911.md', rule('BR-911', 'Address list', 'The list returns at most fifty addresses.'))
+  },
+  expect: ['BR-910 bounds "address" at 20', 'BR-911'],
+})
+
+librarian('digits and number words compare against each other', {
+  mutate: ({ write }) => {
+    write('customer/knowledge/rules/BR-912.md', rule('BR-912', 'Cap', 'Limited to 20 addresses.'))
+    write('customer/knowledge/rules/BR-913.md', rule('BR-913', 'Overflow', 'Customers with more than fifty addresses are truncated.'))
+  },
+  expect: 'bounds "address" at 20',
+})
+
+// Everything below asserts the tool stays quiet.
+
+librarian('a lower bound below a ceiling is not tension', {
+  mutate: ({ write }) => {
+    write('customer/knowledge/rules/BR-914.md', rule('BR-914', 'Cap', 'At most twenty addresses. BR-001 applies.'))
+    write('customer/knowledge/rules/BR-915.md', rule('BR-915', 'Floor', 'At least one address. BR-914 applies.'))
+  },
+  reject: 'Quantitative tension',
+})
+
+librarian('unbounded quantities in scenarios are not tension', {
+  mutate: ({ write }) => {
+    write('customer/knowledge/rules/BR-916.md', rule('BR-916', 'Cap', 'At most twenty addresses.'))
+    write('customer/knowledge/contracts/CT-916.md',
+      '---\nid: CT-916\ntype: contract\ntitle: Setup\nstatus: active\nverifies: [BR-916]\n---\nGiven a customer with 3 addresses, when a fourth address is added.\n')
+  },
+  reject: 'Quantitative tension',
+})
+
+librarian('http status codes are not quantities', {
+  mutate: ({ write }) => {
+    write('customer/knowledge/rules/BR-917.md', rule('BR-917', 'Cap', 'At most 200 requests are queued. BR-001 applies.'))
+    write('customer/knowledge/rules/BR-918.md', rule('BR-918', 'Errors', 'Returns 404 requests naming an unknown customer, and 409 requests duplicating one. BR-917 applies.'))
+  },
+  reject: 'Quantitative tension',
+})
+
+librarian('ordered list markers are not quantities', {
+  mutate: ({ write }) => {
+    write('customer/knowledge/rules/BR-919.md', rule('BR-919', 'Cap', 'At most two reasons apply. BR-001 applies.'))
+    write('customer/knowledge/rules/BR-920.md', rule('BR-920', 'Reasons', 'BR-919 lists these reasons:\n\n1. reasons of one kind\n2. reasons of another\n3. reasons of a third\n50. reasons far down a list'))
+  },
+  reject: 'Quantitative tension',
+})
+
+// The false positive found against the brownfield pilot: a decision referenced
+// only from a module overview was reported as referenced by nothing.
+librarian('an item cited only from an overview is not an orphan', {
+  mutate: ({ write, read }) => {
+    write('customer/knowledge/rules/BR-921.md', rule('BR-921', 'Lonely', 'A rule nothing else mentions.'))
+    write('customer/knowledge/overview.md', `${read('customer/knowledge/overview.md')}\n\nSee BR-921 for the address rule.\n`)
+  },
+  reject: 'BR-921',
+})
+
+librarian('an item cited from nowhere at all is an orphan', {
+  mutate: ({ write }) => write('customer/knowledge/rules/BR-922.md', rule('BR-922', 'Lonely', 'A rule nothing else mentions.')),
+  expect: 'BR-922 is referenced by',
+})
+
+librarian('a contract that verifies nothing is an orphan', {
+  mutate: ({ write }) =>
+    write('customer/knowledge/contracts/CT-923.md',
+      '---\nid: CT-923\ntype: contract\ntitle: Empty\nstatus: active\nverifies: []\n---\nAsserts nothing.\n'),
+  expect: 'CT-923 is a contract that verifies nothing',
+})
+
+librarian('a long-open draft is stale', {
+  mutate: ({ write }) =>
+    write('customer/knowledge/rules/BR-924.md',
+      '---\nid: BR-924\ntype: business-rule\ntitle: Pending\nstatus: draft\nsince: 2020-01-01\naffects: [customer]\n---\nBR-001 is refined by this.\n'),
+  expect: 'has been a draft for',
+})
+
+librarian('an overdue review date is reported', {
+  mutate: ({ write }) =>
+    write('customer/knowledge/assumptions/ASM-925.md',
+      '---\nid: ASM-925\ntype: assumption\ntitle: Old\nstatus: unconfirmed\nreview_by: 2020-01-01\n---\nBR-001 rests on this.\n'),
+  expect: 'was due for review',
+})
+
+librarian('the bundle carries the whole corpus, not a filtered view', {
+  args: ['--bundle'],
+  expect: ['# Knowledge tree review packet', '## The corpus', 'BR-001'],
+})
+
+librarian('json output is machine readable', {
+  args: ['--json'],
+  mutate: ({ write }) => {
+    write('customer/knowledge/rules/BR-926.md', rule('BR-926', 'Cap', 'At most twenty addresses.'))
+    write('customer/knowledge/rules/BR-927.md', rule('BR-927', 'Overflow', 'More than fifty addresses are held.'))
+  },
+  expect: ['"kind": "tension"', '"value": 50'],
+})
 
 // ------------------------------------------------------------------ report
 

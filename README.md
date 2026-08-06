@@ -42,6 +42,23 @@ npm run validate -- path/to/tree    # validates any knowledge tree
 
 The [example](example/) tree is a small commerce domain with two modules, twelve knowledge items, a rule that deliberately spans both modules, and one module left in a `knowledge-ahead` drift state.
 
+## The Librarian
+
+Every other tool here looks at a change. `regen-librarian` looks at the whole corpus, and hunts for the failures that only appear when items are read against each other.
+
+```bash
+npx -p regen-engineering-schema regen-librarian .
+npx -p regen-engineering-schema regen-librarian . --bundle   # packet for the reading pass
+```
+
+It finds quantitative tension (an upper bound that something else in the tree exceeds), orphans, staleness, duplication candidates, and low-confidence items that much of the tree has come to rest on.
+
+The tension check exists because of a real failure. The reference demo carried a rule capping a customer's address book at twenty alongside another describing a response of fifty. Both files were individually well formed, so validation reported no problems; no contract asked, so the suite stayed green. A person found it days later by reading two files side by side.
+
+**This is deliberately only half a Librarian.** [REP-0006](https://github.com/tysoncung/regen.engineering/blob/main/reps/REP-0006-continuous-knowledge-operations.md) specifies the Librarian as a reader, and structure and arithmetic can only say where to look. Whether two rules actually contradict, whether a duplicate is redundancy or emphasis, whether an old draft is stale or simply settled: all of that is judgement, and `--bundle` emits the packet for it. Shipping this half alone and calling it done would repeat the exact mistake the REP exists to fix.
+
+It always exits 0. These are candidates for a person to read, not build breaks, and a tool that fails a build on a heuristic teaches people to switch it off.
+
 ## What the validator checks
 
 1. Frontmatter parses and matches the schema, with unknown fields rejected so typos fail loudly
@@ -55,7 +72,7 @@ Exit code is non-zero on any error, so it works as a CI gate unchanged.
 
 ## Status
 
-Version 0.1.0, draft. Expect breaking changes before 1.0. Semver applies: anything that breaks an existing knowledge tree bumps the major version and ships with migration notes.
+Version 0.4.0, draft. Expect breaking changes before 1.0. Semver applies: anything that breaks an existing knowledge tree bumps the major version and ships with migration notes.
 
 ## Licence
 
