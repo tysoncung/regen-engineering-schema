@@ -1,0 +1,98 @@
+name: Publish to npm
+
+# Publishing is deliberately manual and tag-driven, not automatic on every push
+# to main. A package version is a promise to strangers: once 0.3.1 exists it can
+# never mean anything else, and an accidental publish cannot be taken back
+# (unpublish is restricted, and republishing the same version is forbidden).
+#
+# To release:
+#   1. bump "version" in package.json, commit, push
+#   2. git tag v0.3.1 && git push --tags
+#
+# Requires an NPM_TOKEN repository secret: a granular access token with write
+# access to this package and "bypass 2FA" enabled. Without it, this workflow
+# skips cleanly rather than failing.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Pack and verify only, publish nothing'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gate
+        id: gate
+        env:
+          HAS_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
+        run: |
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No NPM_TOKEN secret; skipping. Add one to enable publishing." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Install and test
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          npm ci || npm install
+          npm test
+
+      - name: Tag must match package version
+        if: steps.gate.outputs.run == 'true' && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          # A tag that disagrees with package.json publishes a version nobody
+          # expects, which is the most common way a release goes wrong.
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(node -p "require('./package.json').version")
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::Tag v$TAG does not match package.json version $PKG"
+            exit 1
+          fi
+          echo "Publishing version $PKG" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify the tarball contents
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          npm pack --dry-run 2>&1 | tee /tmp/pack.txt
+          # The files allowlist should keep this small; a sudden jump usually
+          # means something private slipped in.
+          if grep -qiE "\.env|\.key|_token|secret" /tmp/pack.txt; then
+            echo "::error::Tarball appears to contain a credential-shaped file"
+            exit 1
+          fi
+          {
+            echo '## Tarball'
+            echo '```'
+            grep -E "package size|unpacked size|total files" /tmp/pack.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish
+        if: steps.gate.outputs.run == 'true' && inputs.dry_run != true
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --provenance
+
+      - name: Dry run only
+        if: steps.gate.outputs.run == 'true' && inputs.dry_run == true
+        run: echo "Dry run: everything verified, nothing published." >> "$GITHUB_STEP_SUMMARY"

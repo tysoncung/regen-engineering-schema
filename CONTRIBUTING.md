@@ -1,5 +1,17 @@
 # Contributing
 
+## Releasing
+
+Publishing is tag-driven, never automatic on push. A version number is a promise to strangers: once `0.3.1` exists it can never mean anything else, and an accidental publish cannot be withdrawn.
+
+```bash
+# bump "version" in package.json, commit, then:
+git tag v0.3.1 && git push --tags
+```
+
+The workflow runs the tests, refuses to publish if the tag disagrees with `package.json`, scans the tarball for credential-shaped files, and publishes with provenance. It needs an `NPM_TOKEN` repository secret (a granular token with write access to this package and bypass-2FA); without one it skips cleanly.
+
+
 Governance, the REP process, house style, and how to report a field report all live in one place, so there is only one copy to keep true:
 
 **https://github.com/tysoncung/regen.engineering/blob/main/CONTRIBUTING.md**
