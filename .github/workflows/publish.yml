@@ -7,7 +7,7 @@ name: Publish to npm
 #
 # To release:
 #   1. bump "version" in package.json, commit, push
-#   2. git tag v0.3.1 && git push --tags
+#   2. gh release create v0.3.1 --generate-notes
 #
 # Requires an NPM_TOKEN repository secret: a granular access token with write
 # access to this package and "bypass 2FA" enabled. Without it, this workflow
@@ -16,14 +16,19 @@ name: Publish to npm
 on:
   release:
     types: [published]
-  push:
-    tags: ['v*']
   workflow_dispatch:
     inputs:
       dry_run:
         description: 'Pack and verify only, publish nothing'
         type: boolean
         default: true
+
+# One publish at a time. Creating a release also creates a tag, so listening to
+# both fired two runs that raced: the first uploaded the version and the second
+# got a 403 for republishing it. The release trigger alone is sufficient.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read

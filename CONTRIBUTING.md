@@ -4,13 +4,12 @@
 
 Publishing is tag-driven, never automatic on push. A version number is a promise to strangers: once `0.3.1` exists it can never mean anything else, and an accidental publish cannot be withdrawn.
 
-Two ways, both equivalent:
-
 ```bash
-# bump "version" in package.json, commit, then either:
-git tag v0.3.1 && git push --tags          # tag push
-gh release create v0.3.1 --generate-notes  # or draft a GitHub release
+# bump "version" in package.json, commit, push, then:
+gh release create v0.3.1 --generate-notes
 ```
+
+Creating the release is what publishes; it creates the tag as a side effect. Pushing a bare tag deliberately does **not** trigger a publish, because listening to both fired two racing runs.
 
 Dry run first if you want to see what would happen without publishing anything:
 
