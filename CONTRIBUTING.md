@@ -4,9 +4,18 @@
 
 Publishing is tag-driven, never automatic on push. A version number is a promise to strangers: once `0.3.1` exists it can never mean anything else, and an accidental publish cannot be withdrawn.
 
+Two ways, both equivalent:
+
 ```bash
-# bump "version" in package.json, commit, then:
-git tag v0.3.1 && git push --tags
+# bump "version" in package.json, commit, then either:
+git tag v0.3.1 && git push --tags          # tag push
+gh release create v0.3.1 --generate-notes  # or draft a GitHub release
+```
+
+Dry run first if you want to see what would happen without publishing anything:
+
+```bash
+gh workflow run publish.yml -f dry_run=true
 ```
 
 The workflow runs the tests, refuses to publish if the tag disagrees with `package.json`, scans the tarball for credential-shaped files, and publishes with provenance. It needs an `NPM_TOKEN` repository secret (a granular token with write access to this package and bypass-2FA); without one it skips cleanly.
