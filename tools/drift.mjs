@@ -70,8 +70,16 @@ const touch = (m, kind, path) => {
   state.get(m)[kind].push(path)
 }
 
+const unmapped = []
 const IGNORE = /(^|\/)(\.github|node_modules|dist|coverage|\.astro)\//
 const META = /(^|\/)(README|LICENSE|CHANGELOG)(\.md)?$|(^|\/)(package(-lock)?\.json|\.gitignore)$/i
+
+// Modules may declare where their implementation lives when it is not under
+// the module directory (REP-0002 era lock field).
+const declared = []
+for (const lock of tree.locks.values())
+  for (const prefix of lock.data?.implementation_paths ?? [])
+    declared.push({ module: lock.module, prefix: prefix.replace(/\/+$/, '') })
 
 for (const raw of changed) {
   const path = intoTree(raw)
@@ -91,7 +99,23 @@ for (const raw of changed) {
     touch(parts[parts.length - 2], 'knowledge', path)
     continue
   }
-  if (tree.modules.has(parts[0])) touch(parts[0], 'code', path)
+  if (tree.modules.has(parts[0])) {
+    touch(parts[0], 'code', path)
+    continue
+  }
+
+  const owner = declared.find((d) => path === d.prefix || path.startsWith(`${d.prefix}/`))
+  if (owner) {
+    touch(owner.module, 'code', path)
+    continue
+  }
+
+  // A changed file we cannot attribute to a module. Silence here is the worst
+  // possible behaviour: it produces a clean report from an empty partition,
+  // which reads as "no drift" when it means "I could not tell". Observed on the
+  // reference demo, whose implementations live in impl/<stack>/ rather than
+  // <module>/, so drift detection had never examined them at all.
+  unmapped.push(path)
 }
 
 // ---------------------------------------------------------------- verdict
@@ -111,21 +135,41 @@ for (const [module, { knowledge, code }] of [...state].sort()) {
   })
 }
 
+// Unattributable code changes are reported before any verdict, because a
+// verdict computed from files we could not classify is not a verdict.
+const IMPL_HINT = /(^|\/)(impl|src|lib|app|server|api)(\/|$)|\.(ts|js|mjs|py|go|rb|java|rs|php)$/
+const unmappedCode = unmapped.filter((p) => IMPL_HINT.test(p))
+
 const blocking = findings.filter((f) => !f.accepted)
 
 if (json) {
-  console.log(JSON.stringify({ findings, blocking: blocking.length, changed: changed.length }, null, 2))
-  process.exit(blocking.length ? 1 : 0)
+  console.log(
+    JSON.stringify({ findings, blocking: blocking.length, changed: changed.length, unmapped: unmappedCode }, null, 2),
+  )
+  process.exit(blocking.length || unmappedCode.length ? 1 : 0)
 }
 
 console.log(`Drift check  ${tree.root}`)
 console.log(`${changed.length} changed file(s), ${state.size} module(s) touched`)
 console.log()
 
-if (!findings.length) {
-  console.log('No code-ahead drift. Every module with implementation changes also changed its knowledge.')
-  process.exit(0)
+if (unmappedCode.length) {
+  console.log(`CANNOT TELL: ${unmappedCode.length} changed file(s) belong to no module, so drift was not assessed for them:`)
+  for (const p of unmappedCode.slice(0, 10)) console.log(`          ${p}`)
+  if (unmappedCode.length > 10) console.log(`          ... and ${unmappedCode.length - 10} more`)
+  console.log()
+  console.log('A module is a directory containing knowledge/. Implementations outside one are invisible')
+  console.log('to this check. Either move them under the module, or map them with implementation_paths')
+  console.log('in the module lock. Reporting "no drift" here would be a false reassurance.')
+  console.log()
 }
+
+if (!findings.length && !unmappedCode.length) {
+  console.log('No code-ahead drift. Every module with implementation changes also changed its knowledge.')
+  process.exit(unmappedCode.length ? 1 : 0)
+}
+
+if (!findings.length) process.exit(1)
 
 for (const f of findings) {
   if (f.accepted) {

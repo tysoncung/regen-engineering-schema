@@ -545,6 +545,45 @@ check('traceability marks requirements without contracts as gaps', {
   expectCode: 0,
 })
 
+// ------------------------------------------------- drift: unmappable paths
+// The worst failure this tool can have is silence: reporting "no drift" from a
+// partition it could not classify. Found by exercising the loop on the demo,
+// whose implementations live in impl/<stack>/ rather than <module>/.
+
+drift('unmappable implementation change refuses to report clean', ['impl/python/server.py'], {
+  expect: ['CANNOT TELL', 'false reassurance'],
+  expectCode: 1,
+})
+
+drift('unmappable non-code files stay quiet', ['notes/scratch.txt'], {
+  expect: 'No code-ahead drift',
+  expectCode: 0,
+})
+
+drift('implementation_paths makes outside code visible as drift', ['impl/python/server.py'], {
+  mutate: ({ write }) =>
+    write(
+      'customer/knowledge.lock',
+      'module: customer\nknowledge_version: abc1234\ngenerated_by: x\ngenerated_at: 2026-08-06\ndrift: none\nimplementation_paths: [impl/python]\n',
+    ),
+  expect: 'DRIFT     customer',
+  expectCode: 1,
+})
+
+drift(
+  'declared implementation with its knowledge is clean',
+  ['impl/python/server.py', 'customer/knowledge/rules/BR-001.md'],
+  {
+    mutate: ({ write }) =>
+      write(
+        'customer/knowledge.lock',
+        'module: customer\nknowledge_version: abc1234\ngenerated_by: x\ngenerated_at: 2026-08-06\ndrift: none\nimplementation_paths: [impl/python]\n',
+      ),
+    expect: 'No code-ahead drift',
+    expectCode: 0,
+  },
+)
+
 // ------------------------------------------------------------------ report
 
 console.log(`\n${passed} passed, ${failures.length} failed\n`)
