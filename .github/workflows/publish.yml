@@ -80,9 +80,15 @@ jobs:
 
           # Republishing an existing version is refused by the registry anyway,
           # but failing here gives a comprehensible message instead of a 403.
+          # A dry run only warns, so the rest of the checks can still be
+          # exercised against the version that is currently released.
           if npm view "regen-engineering-schema@$PKG" version >/dev/null 2>&1; then
-            echo "::error::Version $PKG is already on npm. Versions are immutable; bump package.json."
-            exit 1
+            if [ "${{ inputs.dry_run }}" = "true" ]; then
+              echo "::warning::Version $PKG is already on npm. A real release would stop here."
+            else
+              echo "::error::Version $PKG is already on npm. Versions are immutable; bump package.json."
+              exit 1
+            fi
           fi
 
           echo "Publishing version $PKG" >> "$GITHUB_STEP_SUMMARY"
