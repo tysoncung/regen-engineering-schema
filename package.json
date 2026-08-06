@@ -1,6 +1,6 @@
 {
   "name": "regen-engineering-schema",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Knowledge schema and reference validator for Regen Engineering",
   "type": "module",
   "license": "MIT",
@@ -13,7 +13,9 @@
     "regen-graph": "./tools/graph.mjs",
     "regen-docs": "./tools/docs.mjs",
     "regen-librarian": "./tools/librarian.mjs",
-    "regen-monitor": "./tools/monitor.mjs"
+    "regen-monitor": "./tools/monitor.mjs",
+    "regen-trigger": "./tools/trigger.mjs",
+    "regen-gather": "./tools/gather.mjs"
   },
   "scripts": {
     "validate": "node tools/validate.mjs",
@@ -25,7 +27,9 @@
     "regen-test": "node tools/regen-test.mjs",
     "docs": "node tools/docs.mjs",
     "librarian": "node tools/librarian.mjs",
-    "monitor": "node tools/monitor.mjs"
+    "monitor": "node tools/monitor.mjs",
+    "trigger": "node tools/trigger.mjs",
+    "gather": "node tools/gather.mjs"
   },
   "dependencies": {
     "ajv": "^8.17.1",

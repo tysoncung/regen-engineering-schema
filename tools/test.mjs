@@ -814,6 +814,165 @@ librarian('json output is machine readable', {
   expect: ['"kind": "tension"', '"value": 50'],
 })
 
+// ------------------------------------------------------------ gatherer
+// These need real history, so each builds a throwaway repository. Worth the
+// setup: the parsing here reads git's output format, and the one bug it shipped
+// with attributed every commit's files to the next commit, which produced a
+// confident and entirely wrong answer rather than an error.
+
+function gatherer(name, { commits, lockPaths, args = [], expect, reject, expectCode = 0 }) {
+  const dir = mkdtempSync(join(tmpdir(), 'regen-gather-'))
+  const g = (...a) => execFileSync('git', a, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+  try {
+    cpSync(EXAMPLE, dir, { recursive: true })
+    if (lockPaths) {
+      writeFileSync(
+        join(dir, 'customer', 'knowledge.lock'),
+        `module: customer\nknowledge_version: abc1234\ngenerated_by: x\ngenerated_at: 2026-08-06\ndrift: none\nimplementation_paths: [${lockPaths}]\n`,
+      )
+    }
+    g('init', '-q', '-b', 'main')
+    g('config', 'user.email', 't@example.com')
+    g('config', 'user.name', 'Test')
+    g('add', '-A')
+    g('commit', '-q', '-m', 'initial')
+    const base = g('rev-parse', 'HEAD').trim()
+
+    for (const c of commits) {
+      for (const [rel, body] of Object.entries(c.files)) {
+        mkdirSync(dirname(join(dir, rel)), { recursive: true })
+        writeFileSync(join(dir, rel), body)
+      }
+      g('add', '-A')
+      g('commit', '-q', '-m', c.message)
+    }
+
+    const { code, out } = run('gather.mjs', [dir, '--since', base, ...args])
+    const problems = []
+    for (const e of [expect].flat().filter(Boolean))
+      if (!out.includes(e)) problems.push(`expected output to contain ${JSON.stringify(e)}`)
+    for (const e of [reject].flat().filter(Boolean))
+      if (out.includes(e)) problems.push(`expected output NOT to contain ${JSON.stringify(e)}`)
+    if (code !== expectCode) problems.push(`expected exit ${expectCode}, got ${code}`)
+    if (problems.length) failures.push({ name: `gatherer: ${name}`, problems, out })
+    else passed++
+  } catch (e) {
+    failures.push({ name: `gatherer: ${name}`, problems: [e.message], out: '' })
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+gatherer('a code-only commit is a candidate', {
+  lockPaths: 'src',
+  commits: [{ message: 'Cap retries at three because the upstream rate limits', files: { 'src/a.js': 'let retries = 3\n' } }],
+  expect: ['1 candidate(s)', 'Cap retries at three'],
+})
+
+gatherer('a commit that also changed knowledge has recorded itself', {
+  lockPaths: 'src',
+  commits: [
+    {
+      message: 'Cap retries at three because the upstream rate limits',
+      files: {
+        'src/a.js': 'let retries = 3\n',
+        'customer/knowledge/rules/BR-940.md':
+          '---\nid: BR-940\ntype: business-rule\ntitle: Retries\nstatus: active\naffects: [customer]\n---\nAt most three retries.\n',
+      },
+    },
+  ],
+  expect: 'No commit in this range changed an implementation without also changing knowledge',
+  reject: 'candidate(s), most likely',
+})
+
+// The bug that shipped: with the record separator at the end of the git format,
+// --name-only files land under the following commit's metadata.
+gatherer('each commit keeps its own files and message', {
+  lockPaths: 'src',
+  args: ['--json'],
+  commits: [
+    { message: 'first change', files: { 'src/first.js': '1\n' } },
+    { message: 'second change', files: { 'src/second.js': '2\n' } },
+  ],
+  expect: ['"subject": "second change"', '"src/second.js"', '"subject": "first change"', '"src/first.js"'],
+})
+
+gatherer('an incident-shaped message ranks above a plain one', {
+  lockPaths: 'src',
+  args: ['--json'],
+  commits: [
+    { message: 'tidy whitespace', files: { 'src/a.js': 'a\n' } },
+    { message: 'Hotfix: cannot allow empty names because the report crashes', files: { 'src/b.js': 'b\n' } },
+  ],
+  expect: '"rank": 2',
+})
+
+// The failure this check exists to avoid: reporting a clean history when the
+// implementation was never found. drift-check shipped exactly this once.
+gatherer('nothing recognised as implementation is CANNOT TELL, not clean', {
+  lockPaths: 'nowhere-near-here',
+  commits: [{ message: 'change something outside the declared paths', files: { 'elsewhere/a.js': 'a\n' } }],
+  expect: ['CANNOT TELL', 'implementation lives somewhere else'],
+  reject: 'clean state',
+  expectCode: 1,
+})
+
+// ------------------------------------------------------------- trigger
+// The refusals matter more than the proposals. Both blocked states are easy to
+// walk into while looking at a dashboard that says a module is unhealthy, and
+// both make regeneration actively harmful rather than merely wasteful.
+
+const trigger = (name, opts) => check(`trigger: ${name}`, { tool: 'trigger.mjs', expectCode: 0, ...opts })
+
+const lock = (fields) =>
+  `module: customer\nknowledge_version: abc1234\ngenerated_by: x\ngenerated_at: 2026-08-06\n${fields}`
+
+trigger('code-ahead drift blocks regeneration outright', {
+  mutate: ({ write }) => write('customer/knowledge.lock', lock('drift: code-ahead\n')),
+  expect: ['DO NOT REGENERATE', 'regenerating would delete it without a trace', 'reconcile first'],
+})
+
+trigger('a failing regeneration test blocks it too', {
+  mutate: ({ write }) =>
+    write('customer/knowledge.lock', lock('drift: none\nlast_regeneration:\n  at: 2026-08-01\n  model: m\n  result: fail\n  contracts_passed: 3\n  contracts_total: 9\n')),
+  expect: ['DO NOT REGENERATE', 'already known to be insufficient', '3/9'],
+})
+
+trigger('a blocker outranks every trigger, not just some', {
+  args: ['--json'],
+  mutate: ({ write }) =>
+    // Drift plus the strongest possible positive signal. The verdict must still
+    // be blocked; a strong reason to regenerate is exactly when this is riskiest.
+    write('customer/knowledge.lock', lock('drift: code-ahead\n')),
+  expect: '"verdict": "blocked"',
+})
+
+trigger('a pass with many guesses is a caution, not a success', {
+  mutate: ({ write }) =>
+    write('customer/knowledge.lock', lock('drift: none\nlast_regeneration:\n  at: 2026-08-05\n  model: m\n  result: pass\n  contracts_passed: 9\n  contracts_total: 9\n  guesses: 19\n')),
+  expect: ['19 guesses', 'partly on luck'],
+})
+
+trigger('a clean recent pass with few guesses proposes nothing', {
+  argsFor: (dir) => [dir],
+  mutate: ({ write }) => {
+    const today = new Date().toISOString().slice(0, 10)
+    write('customer/knowledge.lock', lock(`drift: none\nlast_regeneration:\n  at: ${today}\n  model: m\n  result: pass\n  guesses: 0\n`))
+    write('orders/knowledge.lock', `module: orders\nknowledge_version: abc1234\ngenerated_by: x\ngenerated_at: 2026-08-06\ndrift: none\nlast_regeneration:\n  at: ${today}\n  model: m\n  result: pass\n  guesses: 0\n`)
+  },
+  expect: 'Nothing is worth regenerating today',
+})
+
+trigger('the model-moved signal is weak on its own and does not propose', {
+  argsFor: (dir) => [dir],
+  mutate: ({ write }) => {
+    const today = new Date().toISOString().slice(0, 10)
+    write('customer/knowledge.lock', lock(`drift: none\nlast_regeneration:\n  at: ${today}\n  model: old-model\n  result: pass\n  guesses: 0\n`))
+    write('orders/knowledge.lock', `module: orders\nknowledge_version: abc1234\ngenerated_by: x\ngenerated_at: 2026-08-06\ndrift: none\nlast_regeneration:\n  at: ${today}\n  model: old-model\n  result: pass\n  guesses: 0\n`)
+  },
+  expect: 'Nothing is worth regenerating today',
+})
+
 // -------------------------------------------------------- reading transport
 // Provider resolution and the request shape, without touching the network.
 // The point of these is that the tooling can talk to more than one vendor,

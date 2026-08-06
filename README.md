@@ -86,6 +86,33 @@ The debt report already answers "how healthy is this tree", so this exists for t
 
 It consumes `regen-debt --json` rather than recomputing anything, so the two can never disagree about facts, only about presentation. The weights are printed in the JSON output rather than buried, because a ranking is only as defensible as its weights.
 
+## The Trigger
+
+`regen-trigger` decides whether regenerating a module is worth what it costs. The most useful thing it does is **refuse**.
+
+```bash
+REGEN_LLM_MODEL=<what you would build with today> npx -p regen-engineering-schema regen-trigger .
+```
+
+Two states make regeneration actively harmful rather than merely wasteful, and both are easy to walk into while looking at a dashboard saying a module is unhealthy. **Code-ahead drift** means the implementation holds behaviour the knowledge does not describe, so regenerating deletes it silently and the module looks healthier afterwards because the evidence is gone. **A failing Regeneration Test** means the knowledge is already known to be insufficient, so spending again proves nothing new.
+
+Both refusals are mechanical, because neither is a judgement call. Everything else is weighed and proposed with reasoning: knowledge-ahead, never verified, verification stale, and the model having moved on since the module was built. A pass with many guesses counts as a warning rather than a success, because a module that passed while its agent guessed nineteen times got lucky.
+
+## The Gatherer
+
+`regen-gather` finds changes that implied knowledge nobody wrote down.
+
+```bash
+npx -p regen-engineering-schema regen-gather .
+npx -p regen-engineering-schema regen-gather . --read     # or --bundle
+```
+
+The filter is the whole idea: **commits that changed an implementation and changed no knowledge**. A commit that touched both has already recorded itself. What remains is the set of changes that had something to say and no place to say it, ranked so that incident-shaped changes and long explanatory messages come first, because those are where constraints surface and rarely get recorded.
+
+This reads history rather than the working tree, which is what distinguishes it from `regen-drift`. Drift asks whether the code is ahead right now; this asks what was learned along the way, including in changes since superseded, because the reason usually outlives the diff.
+
+It reports **CANNOT TELL** rather than a clean result when nothing in the range matched anything recognised as implementation, which nearly always means `implementation_paths` is missing from the lock rather than that history is quiet.
+
 ## What the validator checks
 
 1. Frontmatter parses and matches the schema, with unknown fields rejected so typos fail loudly
@@ -99,7 +126,7 @@ Exit code is non-zero on any error, so it works as a CI gate unchanged.
 
 ## Status
 
-Version 0.6.0, draft. Expect breaking changes before 1.0. Semver applies: anything that breaks an existing knowledge tree bumps the major version and ships with migration notes.
+Version 0.7.0, draft. Expect breaking changes before 1.0. Semver applies: anything that breaks an existing knowledge tree bumps the major version and ships with migration notes.
 
 ## Licence
 
