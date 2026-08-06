@@ -95,4 +95,5 @@ jobs:
 
       - name: Dry run only
         if: steps.gate.outputs.run == 'true' && inputs.dry_run == true
-        run: echo "Dry run: everything verified, nothing published." >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo "Dry run complete: everything verified, nothing published." >> "$GITHUB_STEP_SUMMARY"
