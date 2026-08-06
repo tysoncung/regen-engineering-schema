@@ -53,6 +53,20 @@ npx -p regen-engineering-schema regen-librarian . --bundle   # packet for the re
 
 It finds quantitative tension (an upper bound that something else in the tree exceeds), orphans, staleness, duplication candidates, and low-confidence items that much of the tree has come to rest on.
 
+### The reading pass
+
+```bash
+export OPENROUTER_API_KEY=...          # or ANTHROPIC_API_KEY, or REGEN_LLM_API_KEY
+export REGEN_LLM_MODEL=anthropic/claude-sonnet-4.5
+npx -p regen-engineering-schema regen-librarian . --read
+```
+
+`--read` ships the corpus to a model and prints what it finds. It is a transport and holds no opinion of its own; the judgement is in the prompt and the model.
+
+Provider-agnostic on purpose, with no added dependencies. An `OPENROUTER_API_KEY` routes to OpenRouter in the OpenAI-compatible shape, an `ANTHROPIC_API_KEY` alone routes to Anthropic natively, and `REGEN_LLM_BASE_URL` points at anything else that speaks the OpenAI shape. The model is never guessed: a wrong identifier fails at the API with a worse message than the one this prints, and model choice is a real decision.
+
+The methodology claims knowledge outlives models. That claim is worth little if the tooling can only talk to one vendor.
+
 The tension check exists because of a real failure. The reference demo carried a rule capping a customer's address book at twenty alongside another describing a response of fifty. Both files were individually well formed, so validation reported no problems; no contract asked, so the suite stayed green. A person found it days later by reading two files side by side.
 
 **This is deliberately only half a Librarian.** [REP-0006](https://github.com/tysoncung/regen.engineering/blob/main/reps/REP-0006-continuous-knowledge-operations.md) specifies the Librarian as a reader, and structure and arithmetic can only say where to look. Whether two rules actually contradict, whether a duplicate is redundancy or emphasis, whether an old draft is stale or simply settled: all of that is judgement, and `--bundle` emits the packet for it. Shipping this half alone and calling it done would repeat the exact mistake the REP exists to fix.
@@ -85,7 +99,7 @@ Exit code is non-zero on any error, so it works as a CI gate unchanged.
 
 ## Status
 
-Version 0.5.0, draft. Expect breaking changes before 1.0. Semver applies: anything that breaks an existing knowledge tree bumps the major version and ships with migration notes.
+Version 0.6.0, draft. Expect breaking changes before 1.0. Semver applies: anything that breaks an existing knowledge tree bumps the major version and ships with migration notes.
 
 ## Licence
 

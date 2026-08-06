@@ -33,6 +33,7 @@ import { loadTree, ownerOf, ID_PATTERN, ITEM_DIRS, LOCK_PATTERN } from './lib/lo
 const argv = process.argv.slice(2)
 const json = argv.includes('--json')
 const bundle = argv.includes('--bundle')
+const read = argv.includes('--read')
 const treeArg = argv.find((a) => !a.startsWith('--'))
 const tree = loadTree(treeArg ?? process.env.REGEN_TREE ?? 'example')
 
@@ -373,7 +374,7 @@ for (let a = 0; a < shingles.length; a++) {
 const RANK = { high: 0, medium: 1, low: 2 }
 findings.sort((x, y) => RANK[x.severity] - RANK[y.severity] || x.kind.localeCompare(y.kind) || x.msg.localeCompare(y.msg))
 
-if (bundle) {
+if (bundle || read) {
   // The packet for the reading half. Deliberately the whole corpus: the
   // Librarian's whole point is that it reads everything, and a bundle that
   // pre-filtered would smuggle a validator's judgement into a reader's job.
@@ -408,8 +409,59 @@ if (bundle) {
     out.push(`\`\`\`yaml\n${Object.entries(item.data).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join('\n')}\n\`\`\``)
     out.push(item.body.trim())
   }
-  console.log(out.join('\n'))
-  process.exit(0)
+  const packet = out.join('\n')
+  if (bundle) {
+    console.log(packet)
+    process.exit(0)
+  }
+
+  // The reading pass. Everything above this point is arithmetic; everything
+  // below is judgement, and the split is the design claim being made.
+  const { ask } = await import('./lib/read.mjs')
+  const system = [
+    'You are the Librarian of a Regen Engineering knowledge tree, reading the whole',
+    'corpus at once. That is the entire job: a contradiction has no location, it is',
+    'not in either file but between them, so anything that reads one item at a time',
+    'is structurally incapable of finding it.',
+    '',
+    'Hunt, in roughly this order of value: contradictions between items that are each',
+    'individually well formed; knowledge stated in one place and silently assumed in',
+    'another; confidence that should have moved in either direction; staleness; orphans;',
+    'duplication.',
+    '',
+    'The most valuable finding, and the easiest to miss, is an item that was true when',
+    'it was written and that later work has since falsified. Nothing marks such an item',
+    'as changed, because the item does not change when the world does.',
+    '',
+    'Rules you must follow.',
+    'Quote both sides of every finding verbatim. If stating the conflict requires you to',
+    'paraphrase either side, you probably built the contradiction in the paraphrase, and',
+    'you must discard it.',
+    'Rank ruthlessly. This fails on attention, not accuracy: twenty findings nobody reads',
+    'is worse than three that get fixed, because it trains people to ignore the channel',
+    'where the real one will arrive.',
+    'Say unsure when unsure, explicitly, per finding.',
+    'Report finding nothing plainly. A quiet week is a real result and padding it is how',
+    'the channel dies.',
+    'Propose only. Never state a resolution as though it were decided; deciding which of',
+    'two rules is right is a domain judgement that belongs to a human.',
+    '',
+    'Output markdown. One section per finding, most severe first, each naming the items',
+    'involved, quoting the evidence, and saying what would break if it stayed wrong.',
+  ].join('\n')
+
+  try {
+    const { text, model, base } = await ask({ system, user: packet, maxTokens: 8000 })
+    console.log(text.trim())
+    console.log()
+    console.log(`---`)
+    console.log(`Read ${items.length} item(s) via ${model} at ${base}.`)
+    console.log('Proposals only. Nothing here has been agreed, and nothing was changed.')
+    process.exit(0)
+  } catch (e) {
+    console.error(`Reading pass failed.\n${e.message}`)
+    process.exit(2)
+  }
 }
 
 if (json) {

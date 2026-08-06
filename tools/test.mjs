@@ -814,6 +814,135 @@ librarian('json output is machine readable', {
   expect: ['"kind": "tension"', '"value": 50'],
 })
 
+// -------------------------------------------------------- reading transport
+// Provider resolution and the request shape, without touching the network.
+// The point of these is that the tooling can talk to more than one vendor,
+// which is what makes the manifesto's model-independence claim checkable
+// rather than merely asserted.
+
+const { provider, ask } = await import('./lib/read.mjs')
+
+function unit(name, fn) {
+  try {
+    fn()
+    passed++
+  } catch (e) {
+    failures.push({ name: `read: ${name}`, problems: [e.message], out: '' })
+  }
+}
+const eq = (a, b, what) => {
+  if (a !== b) throw new Error(`${what}: expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`)
+}
+
+unit('no key is a helpful error, not a crash', () => {
+  const p = provider({})
+  if (!p.error?.includes('No API key')) throw new Error(`expected a no-key error, got ${JSON.stringify(p)}`)
+})
+
+unit('no model is a helpful error rather than a guessed identifier', () => {
+  const p = provider({ OPENROUTER_API_KEY: 'k' })
+  if (!p.error?.includes('No model')) throw new Error(`expected a no-model error, got ${JSON.stringify(p)}`)
+})
+
+unit('an openrouter key routes to openrouter in the openai shape', () => {
+  const p = provider({ OPENROUTER_API_KEY: 'k', REGEN_LLM_MODEL: 'm' })
+  eq(p.base, 'https://openrouter.ai/api/v1', 'base')
+  eq(p.shape, 'openai', 'shape')
+})
+
+unit('an anthropic key alone routes to anthropic natively', () => {
+  const p = provider({ ANTHROPIC_API_KEY: 'k', REGEN_LLM_MODEL: 'm' })
+  eq(p.base, 'https://api.anthropic.com/v1', 'base')
+  eq(p.shape, 'anthropic', 'shape')
+})
+
+unit('an explicit base url wins, so any compatible endpoint works', () => {
+  const p = provider({ ANTHROPIC_API_KEY: 'k', REGEN_LLM_BASE_URL: 'https://example.test/v1', REGEN_LLM_MODEL: 'm' })
+  eq(p.base, 'https://example.test/v1', 'base')
+  eq(p.shape, 'openai', 'shape')
+})
+
+unit('openrouter wins over anthropic when both are present', () => {
+  const p = provider({ OPENROUTER_API_KEY: 'or', ANTHROPIC_API_KEY: 'an', REGEN_LLM_MODEL: 'm' })
+  eq(p.key, 'or', 'key')
+  eq(p.shape, 'openai', 'shape')
+})
+
+// Request shape and retry behaviour, against a stub.
+const stub = (responses) => {
+  const calls = []
+  let i = 0
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init, headers: init.headers, body: JSON.parse(init.body) })
+    const r = responses[Math.min(i++, responses.length - 1)]
+    return {
+      ok: r.status >= 200 && r.status < 300,
+      status: r.status,
+      json: async () => r.body,
+      text: async () => JSON.stringify(r.body ?? ''),
+    }
+  }
+  return { fetchImpl, calls }
+}
+
+const OPENAI_OK = { status: 200, body: { choices: [{ message: { content: 'findings' } }] } }
+const ANTHROPIC_OK = { status: 200, body: { content: [{ type: 'text', text: 'findings' }] } }
+
+async function unitAsync(name, fn) {
+  try {
+    await fn()
+    passed++
+  } catch (e) {
+    failures.push({ name: `read: ${name}`, problems: [e.message], out: '' })
+  }
+}
+
+await unitAsync('the openai shape sends system as a message and reads choices', async () => {
+  const s = stub([OPENAI_OK])
+  const r = await ask({
+    system: 'sys', user: 'corpus', fetchImpl: s.fetchImpl,
+    env: { OPENROUTER_API_KEY: 'k', REGEN_LLM_MODEL: 'm' },
+  })
+  eq(r.text, 'findings', 'text')
+  eq(s.calls[0].url, 'https://openrouter.ai/api/v1/chat/completions', 'url')
+  eq(s.calls[0].body.messages[0].role, 'system', 'first message role')
+  eq(s.calls[0].headers.authorization, 'Bearer k', 'auth header')
+})
+
+await unitAsync('the anthropic shape sends system as a field and reads content', async () => {
+  const s = stub([ANTHROPIC_OK])
+  const r = await ask({
+    system: 'sys', user: 'corpus', fetchImpl: s.fetchImpl,
+    env: { ANTHROPIC_API_KEY: 'k', REGEN_LLM_MODEL: 'm' },
+  })
+  eq(r.text, 'findings', 'text')
+  eq(s.calls[0].url, 'https://api.anthropic.com/v1/messages', 'url')
+  eq(s.calls[0].body.system, 'sys', 'system field')
+  eq(s.calls[0].headers['x-api-key'], 'k', 'auth header')
+})
+
+await unitAsync('a 429 is retried', async () => {
+  const s = stub([{ status: 429, body: 'slow down' }, OPENAI_OK])
+  const r = await ask({
+    system: 's', user: 'u', fetchImpl: s.fetchImpl,
+    env: { OPENROUTER_API_KEY: 'k', REGEN_LLM_MODEL: 'm' },
+  })
+  eq(r.text, 'findings', 'text after retry')
+  eq(s.calls.length, 2, 'call count')
+})
+
+await unitAsync('a 401 is not retried, because repeating it cannot help', async () => {
+  const s = stub([{ status: 401, body: 'bad key' }])
+  let threw = null
+  try {
+    await ask({ system: 's', user: 'u', fetchImpl: s.fetchImpl, env: { OPENROUTER_API_KEY: 'k', REGEN_LLM_MODEL: 'm' } })
+  } catch (e) {
+    threw = e
+  }
+  if (!threw) throw new Error('expected a throw on 401')
+  eq(s.calls.length, 1, 'call count')
+})
+
 // ------------------------------------------------------------------ report
 
 console.log(`\n${passed} passed, ${failures.length} failed\n`)
