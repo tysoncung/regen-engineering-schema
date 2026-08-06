@@ -1,6 +1,6 @@
 # Regen Engineering Knowledge Schema
 
-Version 0.3.0 (draft, 2026-07-31)
+Version 0.3.1 (draft, 2026-08-06)
 
 This document defines how knowledge is laid out, formatted, linked, and validated in a Regen Engineering repository. It is deliberately small: it should take about twenty minutes to read, and it invents no new file formats. Everything is Markdown with YAML frontmatter, plus two JSON Schemas for validation.
 
