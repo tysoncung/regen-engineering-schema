@@ -12,7 +12,8 @@
     "regen-test": "./tools/regen-test.mjs",
     "regen-graph": "./tools/graph.mjs",
     "regen-docs": "./tools/docs.mjs",
-    "regen-librarian": "./tools/librarian.mjs"
+    "regen-librarian": "./tools/librarian.mjs",
+    "regen-monitor": "./tools/monitor.mjs"
   },
   "scripts": {
     "validate": "node tools/validate.mjs",
@@ -23,7 +24,8 @@
     "graph": "node tools/graph.mjs",
     "regen-test": "node tools/regen-test.mjs",
     "docs": "node tools/docs.mjs",
-    "librarian": "node tools/librarian.mjs"
+    "librarian": "node tools/librarian.mjs",
+    "monitor": "node tools/monitor.mjs"
   },
   "dependencies": {
     "ajv": "^8.17.1",

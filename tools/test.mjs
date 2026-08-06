@@ -648,6 +648,55 @@ check('superseded by an active rule is accepted', {
   expectCode: 0,
 })
 
+// ------------------------------------------------------------- monitor
+
+const monitor = (name, opts) => check(`monitor: ${name}`, { tool: 'monitor.mjs', expectCode: 0, ...opts })
+
+monitor('ranks modules rather than metrics', {
+  expect: ['Monitor: 2 module(s)', 'Furthest from being understood'],
+})
+
+monitor('says plainly when there is no baseline', {
+  expect: 'No baseline recorded yet',
+})
+
+// Code-ahead drift is weighted highest, because it is the one signal that is a
+// fact about present trouble rather than a prediction of future trouble.
+monitor('undeclared code-ahead drift outranks everything else', {
+  argsFor: (dir) => [dir],
+  mutate: ({ write }) => {
+    write(
+      'orders/knowledge.lock',
+      'module: orders\nknowledge_version: abc1234\ngenerated_by: x\ngenerated_at: 2026-08-06\ndrift: code-ahead\n',
+    )
+  },
+  expect: ['code-ahead drift, undeclared'],
+})
+
+monitor('declared drift debt scores below undeclared', {
+  tool: 'monitor.mjs',
+  args: ['--json'],
+  mutate: ({ write }) => {
+    write(
+      'orders/knowledge.lock',
+      'module: orders\nknowledge_version: abc1234\ngenerated_by: x\ngenerated_at: 2026-08-06\ndrift: code-ahead\ndrift_debt:\n  since: 2026-08-01\n  reason: incident hotfix\n  owner: tyson\n',
+    )
+  },
+  expect: '"integrity": 70',
+})
+
+// The whole value of the tool is the comparison against last time, so the
+// baseline has to survive being written and read back.
+monitor('a recorded baseline produces a trend on the next run', {
+  argsFor: (dir) => [dir, '--record'],
+  expect: 'Baseline written to',
+})
+
+monitor('weights are stated in the output, not buried', {
+  args: ['--json'],
+  expect: ['"weights"', '"integrity": 40'],
+})
+
 // ----------------------------------------------------------- librarian
 // The Librarian reports candidates rather than verdicts, so it always exits 0.
 // What matters is what it notices and, at least as much, what it does not:

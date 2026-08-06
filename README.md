@@ -59,6 +59,19 @@ The tension check exists because of a real failure. The reference demo carried a
 
 It always exits 0. These are candidates for a person to read, not build breaks, and a tool that fails a build on a heuristic teaches people to switch it off.
 
+## The Monitor
+
+`regen-monitor` ranks **modules** by how far each is from being understood, and compares against a recorded baseline so decay is visible as a direction rather than a number.
+
+```bash
+npx -p regen-engineering-schema regen-monitor .
+npx -p regen-engineering-schema regen-monitor . --record   # write the baseline, then commit it
+```
+
+The debt report already answers "how healthy is this tree", so this exists for the two things that report cannot do. It is **per metric, not per module**: freshness at 50% does not tell you which module to open, and work happens on modules. And it has **no memory**: a module at 60% that was at 90% last month is being fixed, one that was at 30% is in trouble, the number is identical and the correct response is opposite. Decay is a derivative, and you cannot see it in a snapshot.
+
+It consumes `regen-debt --json` rather than recomputing anything, so the two can never disagree about facts, only about presentation. The weights are printed in the JSON output rather than buried, because a ranking is only as defensible as its weights.
+
 ## What the validator checks
 
 1. Frontmatter parses and matches the schema, with unknown fields rejected so typos fail loudly
