@@ -18,9 +18,19 @@ BR-002 ──affects──────► customer, orders      (regeneration bl
        ──verified_by───► CT-002               (what proves it still holds)
 ```
 
-## Not on npm yet
+## Install
 
-**Do not run `npx regen-<anything>`.** None of these names are published, so npx would resolve them from the public registry to whatever a stranger has uploaded under that name, and run it. Clone this repository and call the tools by path until an official package exists.
+```bash
+npm install -g regen-engineering-schema    # then: regen-validate .
+```
+
+Or without installing, note the `-p`:
+
+```bash
+npx -p regen-engineering-schema regen-validate .
+```
+
+**The `-p` is not optional.** The commands are named `regen-validate`, `regen-impact` and so on, but the package is `regen-engineering-schema`. Bare `npx regen-validate` would look for a *package* of that name, which this project does not own, so npx would fetch and run whatever a stranger publishes under it. Always name the package.
 
 ## Try it
 
