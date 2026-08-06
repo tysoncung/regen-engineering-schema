@@ -1,0 +1,79 @@
+# The logical data model this module owns. REP-0005.
+#
+# Not DDL. There is no column width here, no index, no storage engine and no
+# vendor type, because those are physical choices that belong to whatever
+# implementation is current. What is here is the part that must survive being
+# regenerated: what exists, what identifies it, what may be absent, and what
+# must be true of the rows once they are stored.
+version: 2
+
+description: >
+  Customers and the addresses they hold. Owned here rather than by orders
+  because a customer exists before any order does and outlives every one of
+  them, so orders reference this and never the other way round.
+
+entities:
+  customer:
+    description: A person or organisation that can hold addresses and place orders.
+    identity: [id]
+    fields:
+      - name: id
+        type: uuid
+        nullable: false
+        description: Stable for the life of the customer, including after deletion.
+      - name: email
+        type: string
+        nullable: false
+        unique: true
+        description: Unique across all customers, including deleted ones. See BR-001.
+      - name: status
+        type: enum
+        values: [active, deleted]
+        nullable: false
+        description: >
+          Deletion is a status rather than a removal, because BR-003 requires a
+          deleted customer to be distinguishable from one that never existed.
+      - name: created_at
+        type: timestamp
+        nullable: false
+      - name: deleted_at
+        type: timestamp
+        nullable: true
+        since: 2
+        description: Set when status becomes deleted, and never cleared.
+    invariants:
+      - Email is unique across every customer, deleted ones included, so a deleted customer's address cannot be reused by a new signup.
+      - status is deleted if and only if deleted_at is set.
+
+  address:
+    description: A postal address belonging to exactly one customer.
+    identity: [id]
+    fields:
+      - name: id
+        type: uuid
+        nullable: false
+      - name: customer_id
+        type: uuid
+        nullable: false
+      - name: is_default
+        type: boolean
+        nullable: false
+        description: See BR-002 for how the default is chosen when addresses change.
+      - name: line1
+        type: string
+        nullable: false
+      - name: postcode
+        type: string
+        nullable: false
+    invariants:
+      - A customer with at least one address has exactly one default. Not enforceable by a column constraint, and stated here because otherwise nobody would know it was intended.
+
+relationships:
+  - from: address
+    to: customer
+    cardinality: many-to-one
+    on_delete: restrict
+    description: >
+      Restrict rather than cascade, because customers are never physically
+      deleted. If a delete ever reaches the database it means something has gone
+      wrong upstream, and failing loudly is the wanted behaviour.

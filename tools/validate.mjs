@@ -14,6 +14,7 @@ import Ajv from 'ajv/dist/2020.js'
 import addFormats from 'ajv-formats'
 import { loadTree, isVerified } from './lib/load.mjs'
 import { checkModuleInterface } from './lib/openapi.mjs'
+import { checkModuleData, checkMigrationChain } from './lib/dataschema.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const SCHEMA_DIR = join(HERE, '..', 'schemas')
@@ -78,6 +79,32 @@ for (const module of tree.modules) {
   for (const msg of result.warnings) warn(`${module}/knowledge/overview.md`, msg)
 }
 
+// ------------------------------------------------------------ stored data
+// REP-0005: a module that owns persistent data carries a logical data schema,
+// and the migrations that produced it form an unbroken chain ending where the
+// schema says it is. Data is the one artifact that cannot be regenerated, so a
+// disagreement between the model and its history is not a tidiness problem.
+
+const dataSchemaJson = load('data-schema.schema.json')
+
+for (const module of tree.modules) {
+  const moduleDir = join(tree.root, module)
+  const overviewPath = join(moduleDir, 'knowledge', 'overview.md')
+  const overview = existsSync(overviewPath) ? readFileSync(overviewPath, 'utf8') : ''
+  const where = `${module}/knowledge/data.schema.yaml`
+
+  const data = checkModuleData(moduleDir, overview, ajv, dataSchemaJson)
+  for (const msg of data.errors) err(where, msg)
+  for (const msg of data.warnings) warn(`${module}/knowledge/overview.md`, msg)
+
+  const migrations = [...tree.items.values()].filter(
+    (o) => o.data.type === 'migration' && o.file.startsWith(`${module}/`),
+  )
+  const chain = checkMigrationChain(module, migrations, data.schema)
+  for (const msg of chain.errors) err(where, msg)
+  for (const msg of chain.warnings) warn(where, msg)
+}
+
 // ---------------------------------------------------------------- graph
 
 for (const [id, { file, data }] of tree.items) {
@@ -137,7 +164,11 @@ for (const [id, { file, data }] of tree.items) {
 
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`
 
-console.log(`Regen Engineering schema v0.1  ${relative(process.cwd(), tree.root) || '.'}`)
+// Read from package.json rather than hardcoded: the banner said v0.1 through
+// six releases, which is exactly the kind of stale fact the Librarian exists to
+// find, sitting in the tool that reports on staleness.
+const VERSION = JSON.parse(readFileSync(join(HERE, '..', 'package.json'), 'utf8')).version
+console.log(`Regen Engineering schema v${VERSION}  ${relative(process.cwd(), tree.root) || '.'}`)
 console.log(
   `Scanned ${plural(tree.items.size, 'item')} across ${plural(tree.modules.size, 'module')}: ${[...tree.modules].sort().join(', ') || 'none'}`,
 )

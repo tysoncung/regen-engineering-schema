@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://regen.engineering/schemas/data-schema.schema.json",
+  "title": "Regen Engineering data schema",
+  "description": "The logical data model a module owns. REP-0005. Deliberately not vendor DDL and not a migration script, because the model outlives both: this describes what is stored and what must be true of it, and leaves how to store it to the implementation. A module that owns persistent data carries this as data.schema.yaml in its knowledge package, for the same reason REP-0002 requires an OpenAPI file for an HTTP interface, which is that prose does not survive regeneration and structure does.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "entities"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The schema version this file describes. Must equal the highest `to` among applied migrations, which is what ties the model to the history that produced it."
+    },
+    "description": {
+      "type": "string",
+      "description": "What this module stores, and why it owns it rather than another module."
+    },
+    "entities": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Keyed by logical entity name, singular and lower case. Not necessarily a table name.",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["fields"],
+        "properties": {
+          "description": { "type": "string" },
+          "identity": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" },
+            "description": "The field or fields that identify one of these. Logical identity, which may or may not be the physical primary key."
+          },
+          "fields": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "type"],
+              "properties": {
+                "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+                "type": {
+                  "enum": ["string", "text", "integer", "decimal", "boolean", "date", "timestamp", "uuid", "json", "binary", "enum"],
+                  "description": "A deliberately small logical set. Anything narrower, such as a column width or a numeric precision, is a physical choice and belongs to the implementation."
+                },
+                "values": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": { "type": "string" },
+                  "description": "Required when type is enum. The permitted values, which are knowledge rather than a constraint the database happens to enforce."
+                },
+                "nullable": { "type": "boolean", "default": true },
+                "unique": { "type": "boolean", "default": false },
+                "description": { "type": "string" },
+                "since": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Schema version this field first appeared in. Lets a reader tell a founding field from one added under pressure."
+                }
+              },
+              "allOf": [
+                {
+                  "if": { "properties": { "type": { "const": "enum" } }, "required": ["type"] },
+                  "then": {
+                    "required": ["values"],
+                    "description": "An enum with no stated values is a string, and calling it an enum implies a constraint nothing records."
+                  }
+                }
+              ]
+            }
+          },
+          "invariants": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "What must be true of the stored rows, stated as prose because these are usually beyond what a type system expresses. A contract may assert them; the database may or may not enforce them, and where it does not, saying so here is the only record that anyone intended it."
+          }
+        }
+      }
+    },
+    "relationships": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to", "cardinality"],
+        "properties": {
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "cardinality": {
+            "enum": ["one-to-one", "many-to-one", "one-to-many", "many-to-many"]
+          },
+          "optional": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether the `from` side may exist without a `to`."
+          },
+          "on_delete": {
+            "enum": ["cascade", "set-null", "restrict", "no-action"],
+            "description": "What should happen to the `from` side when the `to` side is deleted. This is intent, and recording it matters most when the database is not enforcing it: a brownfield pilot declared cascades that never executed because a pragma was never issued, and the declarations were the only surviving record that anyone had meant them."
+          },
+          "description": { "type": "string" }
+        }
+      }
+    }
+  }
+}

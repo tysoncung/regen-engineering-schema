@@ -345,3 +345,24 @@ The traceability matrix is the same audit trail regulated industries maintain by
 This schema follows semver. Additive, backward-compatible changes bump the minor version; anything that breaks an existing knowledge tree bumps the major and must ship with migration notes. `knowledge.lock` may gain a `schema_version` field when there are two versions in the wild to distinguish; v0.1 omits it on purpose.
 
 Changes to this schema go through Regen Engineering Proposals (REPs) once that process opens. Until then, open an issue.
+
+
+## Stored data (REP-0005)
+
+A module that owns persistent data carries `data.schema.yaml` in its knowledge package, for the same reason [REP-0002](https://github.com/tysoncung/regen.engineering/blob/main/reps/REP-0002-interface-contracts.md) requires an OpenAPI file for an HTTP interface: prose does not survive regeneration and structure does.
+
+It describes the **logical** model. No column widths, no indexes, no vendor types, no storage engine, because those are physical choices belonging to whatever implementation is current. What it holds is the part that must survive being rebuilt: what exists, what identifies it, what may be absent, and what must be true of the rows once stored.
+
+The reason to insist on this is narrow and concrete. Nothing otherwise constrains what shape a regenerated implementation invents. Two regenerations of the same knowledge could reasonably choose `full_name` or `first_name`/`last_name`, and the second orphans every existing row. Contracts do not catch it, because they test behaviour through the interface and a service with an empty database satisfies them perfectly.
+
+### Migrations
+
+`migration` items, `MIG-` prefixed, each recording a single forward step with `from`, `to`, an honest `reversible`, a `backfill` rule where new non-null data is required, and `applied_at` once it has run somewhere real.
+
+**`applied_at` is what makes an item immutable.** Before it, a migration is a plan and may be edited freely. After it, the item describes an event that has already happened to data that exists, and editing it makes the record disagree with the world. Correcting an applied migration means writing another one.
+
+The validator checks the **chain**, which is the part a person cannot hold in their head: an unbroken sequence from 1, one step per migration, no applied migration sitting behind an unapplied one, and a `version` in the data schema equal to where the applied chain ends. A gap means a step was lost. A mismatch means the model and its history disagree about what shape the data is in, and one of them is lying to whoever reads it next.
+
+### Invariants are prose on purpose
+
+`invariants` on an entity are sentences, not expressions. Most of the ones worth writing are beyond what a type system says, and recording them matters *most* where the database does not enforce them. A brownfield pilot declared foreign key cascades that never executed, because a pragma was never issued; the declarations turned out to be the only surviving record that anyone had intended them.

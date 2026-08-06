@@ -14,7 +14,7 @@
   "properties": {
     "id": {
       "type": "string",
-      "pattern": "^(BR|ADR|CT|NFR|ASM|RISK|ISS)-[0-9]{3,}$",
+      "pattern": "^(BR|ADR|CT|NFR|ASM|RISK|ISS|MIG)-[0-9]{3,}$",
       "description": "Unique across the whole repository. Prefix must match type."
     },
     "type": {
@@ -25,7 +25,8 @@
         "assumption",
         "nfr",
         "risk",
-        "issue"
+        "issue",
+        "migration"
       ]
     },
     "title": {
@@ -123,6 +124,29 @@
       },
       "uniqueItems": true,
       "description": "Free-form dependency names: modules, external services, libraries, teams. Deliberately not validated against the module list, because the important dependencies are outside the repository."
+    },
+    "from": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Schema version this migration starts from. Migrations only."
+    },
+    "to": {
+      "type": "integer",
+      "minimum": 2,
+      "description": "Schema version this migration produces. Exactly one step past `from`. Migrations only."
+    },
+    "applied_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "The date this ran somewhere real. Its presence is what makes the item immutable: before it, a migration is a plan and may be edited freely; after it, the item describes an event that has already happened to data that exists, and editing it makes the record disagree with the world. Correcting an applied migration means writing another one."
+    },
+    "reversible": {
+      "type": "boolean",
+      "description": "Whether this can be undone without loss. Honestly. Most cannot, and recording false is more useful than omitting the field, because it tells the next person not to look for a way back."
+    },
+    "backfill": {
+      "type": "string",
+      "description": "Where new non-null data comes from, stated as knowledge: what the value should be, not how to compute it. Required when the migration adds a non-null field to an entity that already has rows, because otherwise the rule exists only in whatever script happened to run."
     }
   },
   "allOf": [
@@ -332,6 +356,115 @@
           }
         },
         "description": "Only an issue or a risk can be resolved. A rule or a decision that no longer applies is deprecated or superseded; it was never a problem to solve."
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "migration"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "required": [
+          "from",
+          "to"
+        ],
+        "properties": {
+          "id": {
+            "pattern": "^MIG-"
+          }
+        },
+        "description": "A migration records a single forward step, so it needs both ends of it."
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "from": {}
+        },
+        "required": [
+          "from"
+        ]
+      },
+      "then": {
+        "properties": {
+          "type": {
+            "const": "migration"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "to": {}
+        },
+        "required": [
+          "to"
+        ]
+      },
+      "then": {
+        "properties": {
+          "type": {
+            "const": "migration"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "applied_at": {}
+        },
+        "required": [
+          "applied_at"
+        ]
+      },
+      "then": {
+        "properties": {
+          "type": {
+            "const": "migration"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "reversible": {}
+        },
+        "required": [
+          "reversible"
+        ]
+      },
+      "then": {
+        "properties": {
+          "type": {
+            "const": "migration"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "backfill": {}
+        },
+        "required": [
+          "backfill"
+        ]
+      },
+      "then": {
+        "properties": {
+          "type": {
+            "const": "migration"
+          }
+        }
       }
     }
   ]

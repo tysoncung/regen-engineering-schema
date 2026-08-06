@@ -121,6 +121,8 @@ It reports **CANNOT TELL** rather than a clean result when nothing in the range 
 4. Every `affects` and `implemented_by` names a real module
 5. `knowledge.lock` files match the lock schema
 6. Warns when an active business rule has no contract verifying it, which is knowledge debt
+7. A module owning persistent data carries a valid logical `data.schema.yaml`, and its migrations form an unbroken chain ending where that schema says it does (REP-0005)
+8. A superseded item has an active replacement, so knowledge is never retired in favour of a draft
 
 Exit code is non-zero on any error, so it works as a CI gate unchanged.
 

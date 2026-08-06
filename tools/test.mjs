@@ -814,6 +814,116 @@ librarian('json output is machine readable', {
   expect: ['"kind": "tension"', '"value": 50'],
 })
 
+// ------------------------------------------------- data schema and migrations
+// REP-0005. Data is the one artifact that cannot be regenerated, so a
+// disagreement between the model and the history that produced it is not a
+// tidiness problem: it means one of them is lying to whoever reads it next.
+
+const SCHEMA_V2 = `version: 2
+entities:
+  customer:
+    identity: [id]
+    fields:
+      - name: id
+        type: uuid
+        nullable: false
+      - name: deleted_at
+        type: timestamp
+        nullable: true
+        since: 2
+`
+
+const mig = (id, from, to, extra = '') =>
+  `---\nid: ${id}\ntype: migration\ntitle: Step ${from} to ${to}\nstatus: active\nfrom: ${from}\nto: ${to}\n${extra}affects: [customer]\n---\nbody\n`
+
+check('the example data schema and migration chain validate', { expect: 'OK.', expectCode: 0 })
+
+check('a data schema version ahead of its migrations is rejected', {
+  mutate: ({ write, read }) =>
+    write('customer/knowledge/data.schema.yaml', read('customer/knowledge/data.schema.yaml').replace('version: 2', 'version: 4')),
+  expect: ['schema says version 4', 'applied migrations end at 2'],
+  expectCode: 1,
+})
+
+check('a gap in the migration chain is rejected', {
+  mutate: ({ write, read }) => {
+    write('customer/knowledge/data.schema.yaml', read('customer/knowledge/data.schema.yaml').replace('version: 2', 'version: 4'))
+    write('customer/knowledge/migrations/MIG-003.md', mig('MIG-003', 3, 4, 'applied_at: 2026-08-07\n'))
+  },
+  expect: 'migration chain is broken: MIG-001 ends at 2 and MIG-003 starts at 3',
+  expectCode: 1,
+})
+
+check('a migration spanning more than one step is rejected', {
+  mutate: ({ write }) => write('customer/knowledge/migrations/MIG-009.md', mig('MIG-009', 2, 5, 'applied_at: 2026-08-07\n')),
+  expect: 'MIG-009 goes from 2 to 5; a migration is one step',
+  expectCode: 1,
+})
+
+// An applied migration records something that happened. One behind it that has
+// not been applied means the recorded history has a hole in it.
+check('an applied migration behind an unapplied one is rejected', {
+  mutate: ({ write, read }) => {
+    write('customer/knowledge/data.schema.yaml', read('customer/knowledge/data.schema.yaml').replace('version: 2', 'version: 4'))
+    write('customer/knowledge/migrations/MIG-002.md', mig('MIG-002', 2, 3))
+    write('customer/knowledge/migrations/MIG-003.md', mig('MIG-003', 3, 4, 'applied_at: 2026-08-07\n'))
+  },
+  expect: 'MIG-003 is applied but MIG-002 before it is not',
+  expectCode: 1,
+})
+
+check('identity naming a field that does not exist is rejected', {
+  mutate: ({ write }) =>
+    write('customer/knowledge/data.schema.yaml', 'version: 1\nentities:\n  customer:\n    identity: [ghost]\n    fields:\n      - name: id\n        type: uuid\n'),
+  expect: 'identity "ghost", which is not one of its fields',
+  expectCode: 1,
+})
+
+check('a relationship naming an unknown entity is rejected', {
+  mutate: ({ write }) =>
+    write(
+      'customer/knowledge/data.schema.yaml',
+      'version: 1\nentities:\n  customer:\n    identity: [id]\n    fields:\n      - name: id\n        type: uuid\nrelationships:\n  - from: customer\n    to: nowhere\n    cardinality: many-to-one\n',
+    ),
+  expect: 'names unknown entity "nowhere"',
+  expectCode: 1,
+})
+
+// An enum with no stated values is a string, and calling it an enum implies a
+// constraint that nothing records.
+check('an enum field without values is rejected', {
+  mutate: ({ write }) =>
+    write('customer/knowledge/data.schema.yaml', 'version: 1\nentities:\n  customer:\n    identity: [id]\n    fields:\n      - name: status\n        type: enum\n      - name: id\n        type: uuid\n'),
+  expect: "must have required property 'values'",
+  expectCode: 1,
+})
+
+check('a field claiming a version the schema has not reached is rejected', {
+  mutate: ({ write }) =>
+    write('customer/knowledge/data.schema.yaml', 'version: 1\nentities:\n  customer:\n    identity: [id]\n    fields:\n      - name: id\n        type: uuid\n        since: 7\n'),
+  expect: 'claims since 7, but the schema is at version 1',
+  expectCode: 1,
+})
+
+check('migration fields are rejected on any other item type', {
+  mutate: ({ write }) =>
+    write(
+      'customer/knowledge/rules/BR-950.md',
+      '---\nid: BR-950\ntype: business-rule\ntitle: Not a migration\nstatus: active\nfrom: 1\nto: 2\naffects: [customer]\n---\nbody\n',
+    ),
+  expect: 'must be equal to constant',
+  expectCode: 1,
+})
+
+check('a module describing stored data with no schema warns', {
+  mutate: ({ write, read }) => {
+    rmSync(join(EXAMPLE, 'x'), { force: true })
+    write('orders/knowledge/overview.md', `${read('orders/knowledge/overview.md')}\n\nOrders are persisted to a database table and every row is stored indefinitely.\n`)
+  },
+  expect: 'describes stored data but the module carries no data.schema.yaml',
+  expectCode: 0,
+})
+
 // ------------------------------------------------------------ gatherer
 // These need real history, so each builds a throwaway repository. Worth the
 // setup: the parsing here reads git's output format, and the one bug it shipped
