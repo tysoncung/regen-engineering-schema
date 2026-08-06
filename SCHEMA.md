@@ -62,7 +62,7 @@ Do not maintain parallel `.md` and `.yaml` copies of the same knowledge. Two cop
 | `id` | yes | string | Unique across the whole repository. Pattern: prefix + 3 digits, e.g. `BR-007` |
 | `type` | yes | enum | `business-rule`, `decision`, `contract`, `assumption`, `nfr` |
 | `title` | yes | string | One line, human-readable |
-| `status` | yes | enum | `draft`, `active`, `deprecated`, `superseded` |
+| `status` | yes | enum | `draft`, `active`, `resolved`, `deprecated`, `superseded` |
 | `since` | no | date | When the item became true, `YYYY-MM-DD` |
 | `affects` | no | string[] | Module names whose behaviour depends on this item |
 | `implemented_by` | no | string[] | Module names containing the implementation |
@@ -97,7 +97,15 @@ The frontmatter links form the knowledge graph that impact analysis walks:
 - **affects** answers "if this item changes, which modules are in the regeneration scope?" It is the blast radius.
 - **implemented_by** answers "where does this live in code?" Usually a subset of `affects`.
 - **verified_by** / **verifies** tie rules to contracts from both ends. Every `active` business rule should be verified by at least one contract; the validator warns when one is not. This pair is also the traceability metric.
-- **supersedes** preserves lineage when knowledge is replaced rather than edited. Mark the old item `superseded`, point the new one at it.
+- **supersedes** preserves lineage when knowledge is replaced rather than edited. Mark the old item `superseded`, point the new one at it. The replacement must be `active`: retiring knowledge in favour of a draft leaves nothing describing behaviour the system actually has, which is a hole a real tree fell into.
+
+## Status, and which types may use which
+
+`draft` written but not agreed. `active` agreed and current. `resolved` the problem no longer exists, **issues and risks only**. `deprecated` still described here but no longer the way forward, which for an issue means will-not-fix rather than fixed. `superseded` replaced by another item that points back via `supersedes` and is itself active.
+
+The `resolved` and `deprecated` distinction is load-bearing and easy to get wrong. A fixed issue and an abandoned one are both closed, and they call for opposite actions from anyone reading the tree later. A brownfield pilot marked six fixed issues `deprecated` because `resolved` did not exist yet.
+
+Rules and decisions cannot be `resolved`. They were never a problem to solve, so one that no longer applies is deprecated or superseded.
 
 ## 5. Contracts
 

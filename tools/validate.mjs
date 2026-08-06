@@ -108,6 +108,31 @@ for (const [id, { file, data }] of tree.items) {
     warn(file, `${id} is active but no contract verifies it`)
 }
 
+// A superseded item must have an active replacement. The check above enforces
+// this from the replacement's side; without the mirror, an item can be retired
+// in favour of something still in draft, and then nothing active describes
+// behaviour the system actually has.
+//
+// Found in the brownfield pilot, where an assumption about field vocabularies
+// was marked superseded by a rule that was never promoted out of draft. Both
+// items validated cleanly and the tree had a hole where its current account of
+// that behaviour should have been.
+for (const [id, { file, data }] of tree.items) {
+  if (data.status !== 'superseded') continue
+  const replacements = [...tree.items.values()].filter((o) => o.data.supersedes === id)
+  if (!replacements.length) {
+    err(file, `${id} is superseded but no item supersedes it`)
+    continue
+  }
+  if (!replacements.some((o) => o.data.status === 'active'))
+    err(
+      file,
+      `${id} is superseded, but ${replacements
+        .map((o) => `${o.data.id} is "${o.data.status}"`)
+        .join(' and ')}. Retiring knowledge in favour of a draft leaves nothing active describing this behaviour.`,
+    )
+}
+
 // ---------------------------------------------------------------- report
 
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`

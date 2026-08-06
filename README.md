@@ -72,7 +72,7 @@ Exit code is non-zero on any error, so it works as a CI gate unchanged.
 
 ## Status
 
-Version 0.4.0, draft. Expect breaking changes before 1.0. Semver applies: anything that breaks an existing knowledge tree bumps the major version and ships with migration notes.
+Version 0.5.0, draft. Expect breaking changes before 1.0. Semver applies: anything that breaks an existing knowledge tree bumps the major version and ships with migration notes.
 
 ## Licence
 

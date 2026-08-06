@@ -37,9 +37,11 @@
       "enum": [
         "draft",
         "active",
+        "resolved",
         "deprecated",
         "superseded"
-      ]
+      ],
+      "description": "Lifecycle state. draft: written but not agreed. active: agreed and current. resolved: the problem it described no longer exists, for issues and risks only. deprecated: still described here but no longer the way forward, which for an issue means will-not-fix rather than fixed. superseded: replaced by another item, which must point back via supersedes and must itself be active."
     },
     "since": {
       "type": "string",
@@ -307,6 +309,29 @@
             "const": "issue"
           }
         }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "resolved"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "type": {
+            "enum": [
+              "issue",
+              "risk"
+            ]
+          }
+        },
+        "description": "Only an issue or a risk can be resolved. A rule or a decision that no longer applies is deprecated or superseded; it was never a problem to solve."
       }
     }
   ]

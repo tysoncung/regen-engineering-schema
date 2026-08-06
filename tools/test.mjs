@@ -586,6 +586,68 @@ drift(
   },
 )
 
+// ------------------------------------------------------ status vocabulary
+// Both of these came out of running the Librarian over the brownfield pilot,
+// where six fixed issues were marked "deprecated" because nothing better
+// existed, and an assumption had been retired in favour of a draft.
+
+check('an issue can be resolved', {
+  mutate: ({ write }) =>
+    write(
+      'customer/knowledge/issues/ISS-930.md',
+      '---\nid: ISS-930\ntype: issue\ntitle: Fixed\nstatus: resolved\nowner: tyson\naffects: [customer]\n---\nFixed in abc1234.\n',
+    ),
+  expect: 'OK.',
+  expectCode: 0,
+})
+
+check('a business rule cannot be resolved', {
+  mutate: ({ write }) =>
+    write(
+      'customer/knowledge/rules/BR-931.md',
+      '---\nid: BR-931\ntype: business-rule\ntitle: Not a problem\nstatus: resolved\naffects: [customer]\n---\nbody\n',
+    ),
+  expect: 'must be equal to one of the allowed values',
+  expectCode: 1,
+})
+
+check('superseded with no replacement at all is rejected', {
+  mutate: ({ read, write }) =>
+    write('customer/knowledge/rules/BR-932.md', read('customer/knowledge/rules/BR-001.md').replace('status: active', 'status: superseded').replace('id: BR-001', 'id: BR-932')),
+  expect: 'BR-932 is superseded but no item supersedes it',
+  expectCode: 1,
+})
+
+check('superseded by a draft is rejected', {
+  mutate: ({ write }) => {
+    write(
+      'customer/knowledge/assumptions/ASM-933.md',
+      '---\nid: ASM-933\ntype: assumption\ntitle: Retired\nstatus: superseded\naffects: [customer]\n---\nbody\n',
+    )
+    write(
+      'customer/knowledge/rules/BR-933.md',
+      '---\nid: BR-933\ntype: business-rule\ntitle: Not agreed yet\nstatus: draft\nsupersedes: ASM-933\naffects: [customer]\n---\nbody\n',
+    )
+  },
+  expect: ['ASM-933 is superseded, but BR-933 is "draft"', 'leaves nothing active'],
+  expectCode: 1,
+})
+
+check('superseded by an active rule is accepted', {
+  mutate: ({ write }) => {
+    write(
+      'customer/knowledge/assumptions/ASM-934.md',
+      '---\nid: ASM-934\ntype: assumption\ntitle: Retired\nstatus: superseded\naffects: [customer]\n---\nbody\n',
+    )
+    write(
+      'customer/knowledge/rules/BR-934.md',
+      '---\nid: BR-934\ntype: business-rule\ntitle: Agreed\nstatus: active\nsupersedes: ASM-934\naffects: [customer]\nverified_by: [CT-001]\n---\nbody\n',
+    )
+  },
+  expect: 'OK.',
+  expectCode: 0,
+})
+
 // ----------------------------------------------------------- librarian
 // The Librarian reports candidates rather than verdicts, so it always exits 0.
 // What matters is what it notices and, at least as much, what it does not:
