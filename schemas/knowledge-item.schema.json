@@ -147,6 +147,11 @@
     "backfill": {
       "type": "string",
       "description": "Where new non-null data comes from, stated as knowledge: what the value should be, not how to compute it. Required when the migration adds a non-null field to an entity that already has rows, because otherwise the rule exists only in whatever script happened to run."
+    },
+    "review_by": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "The date this should be looked at again. The Librarian reports items past it, which is the only mechanism that makes a comfortable assumption expire. Most useful on assumptions and risks, and permitted anywhere, because a rule that is only true until a contract renews is a real thing."
     }
   },
   "allOf": [
