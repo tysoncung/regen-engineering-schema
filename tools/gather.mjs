@@ -258,6 +258,12 @@ if (blind) {
   process.exit(1)
 }
 
+if (!commits.length) {
+  console.log('No commits in this range at all, so there is nothing to say about them.')
+  console.log('That is not a finding. Widen the range with --since if you meant to look further back.')
+  process.exit(0)
+}
+
 if (!candidates.length) {
   console.log('No commit in this range changed an implementation without also changing knowledge.')
   console.log(`${touchedImpl.length} commit(s) did touch the implementation, and every one of them`)

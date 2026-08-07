@@ -79,8 +79,13 @@ for (const item of items) {
 const contextRefs = new Map()
 for (const file of tree.files) {
   const isLock = LOCK_PATTERN.test(basename(file))
+  // Markdown and YAML both. REP-0005 made data.schema.yaml knowledge and this
+  // scanner kept looking only at .md, so a migration cited from the data schema
+  // and nowhere else was reported as an orphan. Second time this exact gap has
+  // appeared: the first was overviews. The lesson is that "which files are
+  // knowledge" is a question this function has to keep being told the answer to.
   const isKnowledgeDoc =
-    file.endsWith('.md') &&
+    (file.endsWith('.md') || file.endsWith('.yaml') || file.endsWith('.yml')) &&
     tree.rel(file).split(sep).includes('knowledge') &&
     !ITEM_DIRS.has(basename(dirname(file)))
   if (!isLock && !isKnowledgeDoc) continue

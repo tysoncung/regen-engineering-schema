@@ -774,6 +774,18 @@ librarian('an item cited only from an overview is not an orphan', {
   reject: 'BR-921',
 })
 
+// The second time this exact gap appeared. First overviews, then the data
+// schema, both of which are knowledge and neither of which the citation scanner
+// was looking at.
+librarian('an item cited only from a data schema is not an orphan', {
+  mutate: ({ write }) => {
+    write('customer/knowledge/rules/BR-928.md', rule('BR-928', 'Cited in yaml', 'A rule only the data schema mentions.'))
+    write('customer/knowledge/data.schema.yaml',
+      'version: 1\nentities:\n  customer:\n    identity: [id]\n    fields:\n      - name: id\n        type: uuid\n        description: See BR-928 for why.\n')
+  },
+  reject: 'BR-928',
+})
+
 librarian('an item cited from nowhere at all is an orphan', {
   mutate: ({ write }) => write('customer/knowledge/rules/BR-922.md', rule('BR-922', 'Lonely', 'A rule nothing else mentions.')),
   expect: 'BR-922 is referenced by',
@@ -1019,6 +1031,15 @@ gatherer('an incident-shaped message ranks above a plain one', {
 
 // The failure this check exists to avoid: reporting a clean history when the
 // implementation was never found. drift-check shipped exactly this once.
+// An empty range is not a clean history, it is an empty range, and calling it
+// clean is a small lie the tool was telling.
+gatherer('an empty range says so rather than reporting a clean history', {
+  lockPaths: 'src',
+  commits: [],
+  expect: ['No commits in this range at all', 'not a finding'],
+  reject: 'clean state',
+})
+
 gatherer('nothing recognised as implementation is CANNOT TELL, not clean', {
   lockPaths: 'nowhere-near-here',
   commits: [{ message: 'change something outside the declared paths', files: { 'elsewhere/a.js': 'a\n' } }],
