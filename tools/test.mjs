@@ -942,7 +942,7 @@ check('a module describing stored data with no schema warns', {
 // with attributed every commit's files to the next commit, which produced a
 // confident and entirely wrong answer rather than an error.
 
-function gatherer(name, { commits, lockPaths, args = [], expect, reject, expectCode = 0 }) {
+function gatherer(name, { commits, lockPaths, seed, args = [], expect, reject, expectCode = 0 }) {
   const dir = mkdtempSync(join(tmpdir(), 'regen-gather-'))
   const g = (...a) => execFileSync('git', a, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
   try {
@@ -952,6 +952,13 @@ function gatherer(name, { commits, lockPaths, args = [], expect, reject, expectC
         join(dir, 'customer', 'knowledge.lock'),
         `module: customer\nknowledge_version: abc1234\ngenerated_by: x\ngenerated_at: 2026-08-06\ndrift: none\nimplementation_paths: [${lockPaths}]\n`,
       )
+    }
+    // Files that must exist *before* the range being examined, so a later range
+    // can contain no changes to them. Without this there is no way to build the
+    // case where implementation code exists and simply was not touched.
+    for (const [rel, body] of Object.entries(seed ?? {})) {
+      mkdirSync(dirname(join(dir, rel)), { recursive: true })
+      writeFileSync(join(dir, rel), body)
     }
     g('init', '-q', '-b', 'main')
     g('config', 'user.email', 't@example.com')
@@ -1038,6 +1045,17 @@ gatherer('an empty range says so rather than reporting a clean history', {
   commits: [],
   expect: ['No commits in this range at all', 'not a finding'],
   reject: 'clean state',
+})
+
+// A quiet range and a misconfigured one look identical from the commit log and
+// need opposite responses. Reporting the first as CANNOT TELL is a false alarm,
+// and false alarms are what kill a scheduled check.
+gatherer('a quiet range where the paths hold code is not CANNOT TELL', {
+  lockPaths: 'src',
+  seed: { 'src/app.js': 'export const a = 1\n' },
+  commits: [{ message: 'docs only', files: { 'notes/readme.md': 'hi\n' } }],
+  expect: ['quiet range rather than', 'Nothing to gather'],
+  reject: 'CANNOT TELL',
 })
 
 gatherer('nothing recognised as implementation is CANNOT TELL, not clean', {

@@ -24,8 +24,9 @@
 // have since been superseded, because the reason usually outlives the diff.
 
 import { execFileSync } from 'node:child_process'
-import { resolve, sep } from 'node:path'
-import { loadTree, locksFor } from './lib/load.mjs'
+import { existsSync } from 'node:fs'
+import { join, resolve, sep } from 'node:path'
+import { loadTree, locksFor, walk } from './lib/load.mjs'
 
 const argv = process.argv.slice(2)
 const json = argv.includes('--json')
@@ -98,12 +99,33 @@ const candidates = commits.filter((c) => c.files.some(isImplementation) && !c.fi
 const recorded = commits.filter((c) => c.files.some(isKnowledge))
 const touchedImpl = commits.filter((c) => c.files.some(isImplementation))
 
-// If nothing in the whole range touched anything recognised as implementation,
-// the honest answer is that the implementation could not be found, not that the
-// history is clean. drift-check shipped this exact false reassurance once: a
-// module whose code lives outside its directory reported no drift because every
-// changed file had been silently discarded.
-const blind = commits.length > 0 && touchedImpl.length === 0
+// If nothing in the range touched anything recognised as implementation, there
+// are two very different explanations and only one of them is a problem.
+//
+// The paths might be wrong, which is the case drift-check once got wrong in the
+// other direction: a module whose code lives outside its directory reported no
+// drift because every changed file had been silently discarded. That deserves
+// CANNOT TELL.
+//
+// Or the paths are right and this range simply contains no code changes, which
+// is an ordinary quiet week. Reporting that as CANNOT TELL is a false alarm, and
+// false alarms are the failure mode REP-0006 names as worse than not running at
+// all. Checking whether the declared paths exist separates the two.
+// Existence alone is not enough. A module with no declared implementation_paths
+// falls back to its own directory, which always exists, and in a tree where the
+// code lives elsewhere that directory holds nothing but knowledge. So the real
+// question is whether any searched path contains a file that is not knowledge.
+// That is what separates "the code is somewhere else" from "a quiet range".
+const pathsHoldCode = implPaths.some((rel) => {
+  const abs = join(treePath, rel)
+  if (!existsSync(abs)) return false
+  try {
+    return walk(abs).some((f) => !isKnowledge(tree.rel(f)))
+  } catch {
+    return false
+  }
+})
+const blind = commits.length > 0 && touchedImpl.length === 0 && !pathsHoldCode
 
 // Prose in a commit message is the strongest single signal that something was
 // explained once and never written down. A one-line subject rarely carries a
@@ -247,10 +269,10 @@ if (blind) {
   console.log('CANNOT TELL.')
   console.log()
   console.log(`Not one of the ${commits.length} commit(s) in this range touched anything recognised`)
-  console.log(`as implementation. The paths searched were: ${implPaths.join(', ')}.`)
+  console.log(`as implementation, and none of the paths searched holds any code:`)
+  for (const rel of implPaths) console.log(`  ${rel}`)
   console.log()
-  console.log('That is almost never true of a real repository, so the likely explanation is')
-  console.log('that the implementation lives somewhere else. Declare implementation_paths in')
+  console.log('So the implementation lives somewhere else. Declare implementation_paths in')
   console.log('the module lock and run this again.')
   console.log()
   console.log('Reporting this as "no unwritten knowledge" would be the more comfortable answer')
@@ -265,10 +287,16 @@ if (!commits.length) {
 }
 
 if (!candidates.length) {
+  if (!touchedImpl.length) {
+    console.log(`No commit in this range touched the implementation at all.`)
+    console.log(`The paths hold code (${implPaths.join(', ')}), so this is a quiet range rather than`)
+    console.log('a misconfiguration. Nothing to gather.')
+    process.exit(0)
+  }
   console.log('No commit in this range changed an implementation without also changing knowledge.')
-  console.log(`${touchedImpl.length} commit(s) did touch the implementation, and every one of them`)
-  console.log('also changed knowledge, which is the clean state: every change that had')
-  console.log('something to say found a place to say it.')
+  console.log(`All ${touchedImpl.length} commit(s) that touched the implementation also changed`)
+  console.log('knowledge, which is the clean state: every change that had something to say')
+  console.log('found a place to say it.')
   process.exit(0)
 }
 
