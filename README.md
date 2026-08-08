@@ -130,6 +130,12 @@ Exit code is non-zero on any error, so it works as a CI gate unchanged.
 
 Version 0.8.1, draft. Expect breaking changes before 1.0. Semver applies: anything that breaks an existing knowledge tree bumps the major version and ships with migration notes.
 
+## Reference systems
+
+- [regen-engineering-demo](https://github.com/tysoncung/regen-engineering-demo), one knowledge base and two implementations, stateless.
+- [regen-engineering-stateful](https://github.com/tysoncung/regen-engineering-stateful), a billing ledger with four migrations, and the system that exercises the data schema and migration support added in 0.8.0.
+- [simple-cmdb](https://github.com/tysoncung/simple-cmdb), a brownfield application that had no knowledge tree until one was mined from it.
+
 ## Licence
 
 MIT for the schemas and tooling. Documentation is CC BY-SA 4.0.
